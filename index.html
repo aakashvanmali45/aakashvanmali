@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aakash Vanmali — AI &amp; Computer Vision Researcher</title>
+  <meta name="description" content="Aakash Vanmali — Research in VLMs, zero-shot visual understanding, and vision-language-action models. Seeking PhD positions in Europe.">
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --ink: #0B1222;
+      --ink-light: #111B2E;
+      --ink-surface: #162038;
+      --gold: #C9A84C;
+      --gold-dim: rgba(201, 168, 76, 0.15);
+      --gold-glow: rgba(201, 168, 76, 0.08);
+      --paper: #F6F2E8;
+      --paper-white: #FDFBF5;
+      --text-dark: #1A1A1A;
+      --text-mid: #4A4A4A;
+      --text-light: #777;
+      --text-on-ink: #C8C8D4;
+      --text-bright: #E8E8F0;
+      --border-paper: #E0D8C8;
+      --border-ink: rgba(255,255,255,0.06);
+      --serif: 'Cormorant Garamond', Georgia, serif;
+      --sans: 'Space Grotesk', -apple-system, sans-serif;
+      --mono: 'JetBrains Mono', monospace;
+      --max-w: 780px;
+      --ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+
+    html { font-size: 17px; scroll-behavior: smooth; }
+    body {
+      font-family: var(--sans);
+      color: var(--text-dark);
+      background: var(--paper);
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    ::selection { background: var(--gold); color: var(--ink); }
+
+    a { color: var(--gold); text-decoration: none; transition: color 0.2s; }
+
+    /* ===== HERO ===== */
+    .hero {
+      position: relative;
+      min-height: 100vh;
+      background: var(--ink);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .hero-canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+    .hero::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 180px;
+      background: linear-gradient(to bottom, transparent, var(--paper));
+      z-index: 2;
+    }
+    .hero-content {
+      position: relative;
+      z-index: 3;
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 0 2rem;
+      width: 100%;
+    }
+    .hero-eyebrow {
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 1.2rem;
+      opacity: 0;
+      animation: fadeUp 0.8s var(--ease) 0.2s forwards;
+    }
+    .hero h1 {
+      font-family: var(--serif);
+      font-size: 4.5rem;
+      font-weight: 600;
+      color: var(--text-bright);
+      line-height: 1.05;
+      margin-bottom: 0.8rem;
+      letter-spacing: -0.02em;
+      opacity: 0;
+      animation: fadeUp 0.8s var(--ease) 0.4s forwards;
+    }
+    .hero-tagline {
+      font-family: var(--serif);
+      font-size: 1.55rem;
+      font-weight: 400;
+      font-style: italic;
+      color: var(--gold);
+      margin-bottom: 0.6rem;
+      opacity: 0;
+      animation: fadeUp 0.8s var(--ease) 0.6s forwards;
+    }
+    .hero-affiliation {
+      font-size: 0.88rem;
+      font-weight: 300;
+      color: var(--text-on-ink);
+      line-height: 1.6;
+      margin-bottom: 2rem;
+      opacity: 0;
+      animation: fadeUp 0.8s var(--ease) 0.7s forwards;
+    }
+    .hero-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      opacity: 0;
+      animation: fadeUp 0.8s var(--ease) 0.85s forwards;
+    }
+    .hero-links a {
+      font-size: 0.8rem;
+      font-weight: 500;
+      padding: 0.5rem 1.1rem;
+      border: 1px solid rgba(201, 168, 76, 0.3);
+      border-radius: 2px;
+      color: var(--text-on-ink);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: all 0.25s;
+      backdrop-filter: blur(4px);
+      background: rgba(255,255,255,0.02);
+    }
+    .hero-links a:hover {
+      border-color: var(--gold);
+      color: var(--gold);
+      background: var(--gold-dim);
+    }
+    .hero-links svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+    /* Epigraph — fades in after the dots connect */
+    .hero-quote {
+      margin-top: 2.4rem;
+      max-width: 440px;
+      opacity: 0;
+      transition: opacity 1.6s var(--ease);
+    }
+    .hero-quote.visible { opacity: 1; }
+    .hero-quote p {
+      font-family: var(--serif);
+      font-style: italic;
+      font-size: 1.18rem;
+      font-weight: 400;
+      color: rgba(201, 168, 76, 0.82);
+      line-height: 1.5;
+      position: relative;
+      padding-left: 1rem;
+      border-left: 1px solid rgba(201, 168, 76, 0.3);
+    }
+    .hero-quote span {
+      display: block;
+      font-family: var(--mono);
+      font-size: 0.6rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: rgba(200, 200, 212, 0.45);
+      margin-top: 0.6rem;
+      padding-left: 1rem;
+    }
+    .scroll-hint {
+      position: absolute;
+      bottom: 2.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 3;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      opacity: 0;
+      animation: fadeUp 0.8s var(--ease) 1.2s forwards;
+    }
+    .scroll-hint span {
+      font-family: var(--mono);
+      font-size: 0.6rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: rgba(200,200,212,0.4);
+    }
+    .scroll-line {
+      width: 1px; height: 28px;
+      background: linear-gradient(to bottom, rgba(201,168,76,0.5), transparent);
+      animation: scrollPulse 2s ease-in-out infinite;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(18px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes scrollPulse {
+      0%, 100% { opacity: 0.3; }
+      50% { opacity: 0.8; }
+    }
+
+    /* ===== STICKY NAV ===== */
+    .sticky-nav {
+      position: fixed;
+      top: -60px; left: 0; right: 0;
+      z-index: 50;
+      background: rgba(246, 242, 232, 0.92);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border-paper);
+      transition: top 0.35s var(--ease);
+    }
+    .sticky-nav.visible { top: 0; }
+    .sticky-nav-inner {
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 0.7rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .sticky-nav-name {
+      font-family: var(--serif);
+      font-weight: 600;
+      font-size: 1.05rem;
+      color: var(--text-dark);
+      text-decoration: none;
+    }
+    .sticky-nav-links { display: flex; gap: 1.5rem; }
+    .sticky-nav-links a {
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: var(--text-light);
+      letter-spacing: 0.03em;
+    }
+    .sticky-nav-links a:hover { color: var(--text-dark); text-decoration: none; }
+
+    /* ===== CONTENT ===== */
+    .content {
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 0 2rem;
+    }
+    section { padding: 3.5rem 0; }
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .section-number {
+      font-family: var(--serif);
+      font-size: 2.2rem;
+      font-weight: 300;
+      color: var(--gold);
+      line-height: 1;
+      opacity: 0.6;
+    }
+    .section-title {
+      font-family: var(--serif);
+      font-size: 1.6rem;
+      font-weight: 600;
+      color: var(--text-dark);
+      letter-spacing: -0.01em;
+    }
+    .section-rule {
+      flex: 1; height: 1px;
+      background: var(--border-paper);
+    }
+    .reveal {
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity 0.6s var(--ease), transform 0.6s var(--ease);
+    }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+
+    /* ---- SEEKING BANNER ---- */
+    .seeking-banner {
+      background: var(--ink);
+      color: var(--text-on-ink);
+      padding: 1.4rem 1.8rem;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 3rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .seeking-banner::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 4px;
+      background: var(--gold);
+    }
+    .seeking-icon {
+      width: 8px; height: 8px;
+      background: var(--gold);
+      border-radius: 50%;
+      flex-shrink: 0;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(201,168,76,0.4); }
+      50% { box-shadow: 0 0 0 8px rgba(201,168,76,0); }
+    }
+    .seeking-banner p { font-size: 0.88rem; font-weight: 400; }
+    .seeking-banner strong { color: var(--gold); font-weight: 600; }
+
+    /* ---- NEWS ---- */
+    .news-item {
+      display: grid;
+      grid-template-columns: 6rem 1fr;
+      gap: 0;
+      padding: 0.6rem 0;
+      border-bottom: 1px solid rgba(0,0,0,0.05);
+      font-size: 0.88rem;
+    }
+    .news-item:last-child { border-bottom: none; }
+    .news-date {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--text-light);
+      padding-top: 0.12rem;
+    }
+    .news-text { color: var(--text-dark); }
+
+    /* ---- RESEARCH ---- */
+    .research-statement {
+      font-family: var(--serif);
+      font-size: 1.15rem;
+      line-height: 1.85;
+      color: var(--text-dark);
+      margin-bottom: 1.8rem;
+    }
+    .research-statement strong { font-weight: 600; color: var(--ink); }
+    .topics-wrap { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .topic-pill {
+      font-size: 0.78rem;
+      font-weight: 500;
+      padding: 0.4rem 0.9rem;
+      background: var(--paper-white);
+      border: 1px solid var(--border-paper);
+      color: var(--text-mid);
+      border-radius: 0;
+      transition: all 0.2s;
+    }
+    .topic-pill:hover {
+      border-color: var(--gold);
+      color: var(--gold);
+      background: var(--gold-glow);
+    }
+
+    /* ---- EXPERIENCE ---- */
+    .exp-timeline { position: relative; padding-left: 2rem; }
+    .exp-timeline::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0.6rem; bottom: 0.6rem;
+      width: 1px;
+      background: linear-gradient(to bottom, var(--gold), var(--border-paper));
+    }
+    .exp-entry { position: relative; margin-bottom: 2.5rem; }
+    .exp-entry:last-child { margin-bottom: 0; }
+    .exp-entry::before {
+      content: '';
+      position: absolute;
+      left: -2rem; top: 0.55rem;
+      width: 9px; height: 9px;
+      background: var(--paper);
+      border: 2px solid var(--gold);
+      border-radius: 50%;
+      transform: translateX(-4px);
+    }
+    .exp-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 0.3rem;
+      margin-bottom: 0.15rem;
+    }
+    .exp-role { font-weight: 600; font-size: 0.95rem; color: var(--text-dark); }
+    .exp-dates { font-family: var(--mono); font-size: 0.72rem; color: var(--text-light); }
+    .exp-org { font-size: 0.85rem; color: var(--text-mid); margin-bottom: 0.5rem; }
+    .exp-desc { font-size: 0.85rem; line-height: 1.75; color: var(--text-mid); }
+
+    /* ---- PROJECTS ---- */
+    .projects-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .proj-card {
+      background: var(--paper-white);
+      border: 1px solid var(--border-paper);
+      padding: 1.3rem 1.4rem;
+      display: flex; flex-direction: column;
+      transition: all 0.3s var(--ease);
+      position: relative;
+    }
+    .proj-card:hover {
+      border-color: var(--gold);
+      box-shadow: 0 6px 24px rgba(0,0,0,0.06);
+      transform: translateY(-3px);
+    }
+    .proj-name { font-family: var(--serif); font-weight: 600; font-size: 1rem; line-height: 1.35; margin-bottom: 0.4rem; }
+    .proj-name a { color: var(--text-dark); text-decoration: none; }
+    .proj-name a:hover { color: var(--gold); }
+    .proj-desc { font-size: 0.8rem; line-height: 1.6; color: var(--text-mid); margin-bottom: 0.8rem; flex: 1; }
+    .proj-stack { font-family: var(--mono); font-size: 0.65rem; color: var(--text-light); letter-spacing: 0.02em; }
+    .proj-arrow { position: absolute; top: 1.2rem; right: 1.2rem; font-size: 0.85rem; color: var(--border-paper); transition: all 0.2s; }
+    .proj-card:hover .proj-arrow { color: var(--gold); transform: translate(2px, -2px); }
+
+    /* ---- EDUCATION ---- */
+    .edu-block { display: flex; gap: 1.2rem; align-items: flex-start; }
+    .edu-marker {
+      width: 40px; height: 40px;
+      background: var(--ink);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; margin-top: 0.15rem;
+    }
+    .edu-marker svg { width: 18px; height: 18px; color: var(--gold); }
+    .edu-degree { font-family: var(--serif); font-weight: 600; font-size: 1.05rem; color: var(--text-dark); }
+    .edu-school { font-size: 0.88rem; color: var(--text-mid); }
+    .edu-detail { font-size: 0.82rem; color: var(--text-light); font-style: italic; }
+
+    /* ===== FOOTER ===== */
+    footer { background: var(--ink); color: var(--text-on-ink); margin-top: 3rem; }
+    .footer-inner {
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 3rem 2rem;
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: 1rem;
+    }
+    .footer-left { font-family: var(--serif); font-size: 1.3rem; font-weight: 500; }
+    .footer-left span { color: var(--gold); }
+    .footer-links { display: flex; gap: 1.5rem; }
+    .footer-links a { font-size: 0.82rem; color: var(--text-on-ink); opacity: 0.6; transition: opacity 0.2s; }
+    .footer-links a:hover { opacity: 1; color: var(--gold); text-decoration: none; }
+    .footer-bottom {
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 0 2rem 2rem;
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      color: rgba(200,200,212,0.3);
+    }
+
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 640px) {
+      .hero h1 { font-size: 2.8rem; }
+      .hero-tagline { font-size: 1.2rem; }
+      .projects-grid { grid-template-columns: 1fr; }
+      .content { padding: 0 1.2rem; }
+      .sticky-nav-inner { padding: 0.7rem 1.2rem; }
+      .sticky-nav-links { gap: 1rem; }
+      .section-number { font-size: 1.6rem; }
+      .section-title { font-size: 1.3rem; }
+      .news-item { grid-template-columns: 1fr; gap: 0.1rem; }
+      .footer-inner { flex-direction: column; text-align: center; }
+      .edu-block { flex-direction: column; gap: 0.6rem; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+      .reveal { opacity: 1; transform: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="sticky-nav" id="stickyNav">
+    <div class="sticky-nav-inner">
+      <a href="#" class="sticky-nav-name">Aakash Vanmali</a>
+      <div class="sticky-nav-links">
+        <a href="#research">Research</a>
+        <a href="#experience">Experience</a>
+        <a href="#projects">Projects</a>
+      </div>
+    </div>
+  </nav>
+
+  <section class="hero">
+    <canvas class="hero-canvas" id="clusterCanvas"></canvas>
+    <div class="hero-content">
+      <div class="hero-eyebrow">AI &amp; Computer Vision Research</div>
+      <h1>Aakash<br>Vanmali</h1>
+      <p class="hero-tagline">Building intelligent perception for the real world</p>
+      <p class="hero-affiliation">
+        M.Eng. Mechatronics &amp; Cyber-Physical Systems · Technische Hochschule Deggendorf<br>
+        Master's Thesis at ABB AG, Mannheim
+      </p>
+      <div class="hero-links">
+        <a href="mailto:vanmaliaakash5@gmail.com">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 4L12 13 2 4"/></svg>
+          Email
+        </a>
+        <a href="https://github.com/aakashvanmali45" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+          GitHub
+        </a>
+        <a href="https://linkedin.com/in/aakashvanmali" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+          LinkedIn
+        </a>
+      </div>
+      <div class="hero-quote" id="heroQuote">
+        <p>"You can't connect the dots looking forward; you can only connect them looking backwards."</p>
+        <span>— Steve Jobs</span>
+      </div>
+    </div>
+    <div class="scroll-hint">
+      <span>Scroll</span>
+      <div class="scroll-line"></div>
+    </div>
+  </section>
+
+  <div class="content">
+
+    <div class="seeking-banner reveal" style="margin-top: 3rem;">
+      <span class="seeking-icon"></span>
+      <p><strong>Seeking PhD positions</strong> in AI, Computer Vision, and Robotics across Europe and the Nordics.</p>
+    </div>
+
+    <section class="reveal">
+      <div class="section-header">
+        <span class="section-number">01</span>
+        <span class="section-title">News</span>
+        <span class="section-rule"></span>
+      </div>
+      <div class="news-item">
+        <span class="news-date">Jul 2026</span>
+        <span class="news-text">Completed master's thesis at ABB AG on clustering-based approaches for industrial document digitisation.</span>
+      </div>
+      <div class="news-item">
+        <span class="news-date">2026</span>
+        <span class="news-text">Actively seeking PhD positions in AI, Computer Vision, and Robotics across Europe and the Nordics.</span>
+      </div>
+    </section>
+
+    <section id="research" class="reveal">
+      <div class="section-header">
+        <span class="section-number">02</span>
+        <span class="section-title">Research Interests</span>
+        <span class="section-rule"></span>
+      </div>
+      <p class="research-statement">
+        I am interested in developing <strong>Vision-Language Models (VLMs)</strong> and <strong>Vision-Language-Action (VLA) systems</strong> for robotics, industrial automation, and medical applications. My research also explores unsupervised, semi-supervised, and zero-shot learning to build robust AI systems that learn with minimal labeled data. I am seeking a PhD to advance intelligent perception and decision-making for real-world autonomous systems.
+      </p>
+      <div class="topics-wrap">
+        <span class="topic-pill">Zero-Shot Visual Understanding</span>
+        <span class="topic-pill">Vision-Language Models</span>
+        <span class="topic-pill">Label-Efficient Learning</span>
+        <span class="topic-pill">Novel Class Discovery</span>
+        <span class="topic-pill">Industrial Computer Vision</span>
+        <span class="topic-pill">Vision-Language-Action Models</span>
+        <span class="topic-pill">Robotic Perception</span>
+      </div>
+    </section>
+
+    <section id="experience" class="reveal">
+      <div class="section-header">
+        <span class="section-number">03</span>
+        <span class="section-title">Research &amp; Industry Experience</span>
+        <span class="section-rule"></span>
+      </div>
+      <div class="exp-timeline">
+        <div class="exp-entry">
+          <div class="exp-top">
+            <span class="exp-role">Master's Thesis Researcher</span>
+            <span class="exp-dates">2025 – 2026</span>
+          </div>
+          <div class="exp-org">ABB AG, Mannheim, Germany</div>
+          <p class="exp-desc">Developed a clustering-based human-in-the-loop verification pipeline for industrial document digitisation. Investigated label-efficient approaches to symbol detection in P&amp;ID drawings. Designed and evaluated vision-language model pipelines for industrial inspection use cases.</p>
+        </div>
+        <div class="exp-entry">
+          <div class="exp-top">
+            <span class="exp-role">Computer Vision Intern (PoC)</span>
+            <span class="exp-dates">2023</span>
+          </div>
+          <div class="exp-org">JSW Steel Ltd., India</div>
+          <p class="exp-desc">Built proof-of-concept systems for flame volume measurement and pellet counting using classical and deep learning-based computer vision. Scoped as PoC — demonstrated technical feasibility for production evaluation.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="projects" class="reveal">
+      <div class="section-header">
+        <span class="section-number">04</span>
+        <span class="section-title">Selected Projects</span>
+        <span class="section-rule"></span>
+      </div>
+      <div class="projects-grid">
+        <div class="proj-card">
+          <span class="proj-arrow">↗</span>
+          <div class="proj-name"><a href="https://github.com/aakashvanmali45/autonomous_robot_object_identification" target="_blank">Autonomous Robot with IR Object ID</a></div>
+          <p class="proj-desc">Chain-wheeled mobile robot using IR camera for real-time object identification. ROS 2 + Gazebo perception and control pipelines.</p>
+          <div class="proj-stack">Python · ROS 2 · Gazebo · Computer Vision</div>
+        </div>
+        <div class="proj-card">
+          <span class="proj-arrow">↗</span>
+          <div class="proj-name"><a href="https://github.com/aakashvanmali45/robot_path_planning_Astar_RRT" target="_blank">A* vs. RRT Path Planning</a></div>
+          <p class="proj-desc">Quantitative comparison of search-based and sampling-based path planning for robotic navigation in 2D environments.</p>
+          <div class="proj-stack">MATLAB · Path Planning · Robotics</div>
+        </div>
+        <div class="proj-card">
+          <span class="proj-arrow">↗</span>
+          <div class="proj-name"><a href="https://github.com/aakashvanmali45/AI-Based-PID-Controller" target="_blank">AI-Optimised PID Controller</a></div>
+          <p class="proj-desc">PID controller with AI-based optimisation for precise temperature control in an industrial furnace simulation.</p>
+          <div class="proj-stack">MATLAB · Simulink · Control Systems</div>
+        </div>
+        <div class="proj-card">
+          <span class="proj-arrow">↗</span>
+          <div class="proj-name"><a href="https://github.com/aakashvanmali45/llms-from-scratch" target="_blank">LLMs from Scratch</a></div>
+          <p class="proj-desc">Ground-up implementation of LLM architectures — tokenisation, attention mechanisms, and training loops.</p>
+          <div class="proj-stack">Python · Transformers · Deep Learning</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="reveal">
+      <div class="section-header">
+        <span class="section-number">05</span>
+        <span class="section-title">Education</span>
+        <span class="section-rule"></span>
+      </div>
+      <div class="edu-block">
+        <div class="edu-marker">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3L1 9l11 6 9-4.91V17M5 13.18v4L12 21l7-3.82v-4"/></svg>
+        </div>
+        <div>
+          <div class="edu-degree">M.Eng. Mechatronics &amp; Cyber-Physical Systems</div>
+          <div class="edu-school">Technische Hochschule Deggendorf, Germany</div>
+          <div class="edu-detail">Specialisation: Robotics, Computer Vision, AI, Autonomous Systems</div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <footer>
+    <div class="footer-inner">
+      <div class="footer-left">Let's <span>connect</span>.</div>
+      <div class="footer-links">
+        <a href="mailto:vanmaliaakash5@gmail.com">Email</a>
+        <a href="https://github.com/aakashvanmali45" target="_blank">GitHub</a>
+        <a href="https://linkedin.com/in/aakashvanmali" target="_blank">LinkedIn</a>
+      </div>
+    </div>
+    <div class="footer-bottom">© 2026 Aakash Vanmali · Updated July 2026</div>
+  </footer>
+
+  <script>
+  // ============================================================
+  // CLUSTERING ANIMATION
+  // "You can only connect the dots looking backwards" — Steve Jobs
+  //
+  // Phase 1: Random scatter (chaos, no structure)
+  // Phase 2: Local edges form (nearest-neighbor connections appear)
+  // Phase 3: Points drift to cluster centers, colors differentiate
+  // Phase 4: Inter-cluster bridges form
+  // Phase 5: Ambient — labels visible, gentle floating
+  // ============================================================
+  (function() {
+    const canvas = document.getElementById('clusterCanvas');
+    const ctx = canvas.getContext('2d');
+    const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let W, H;
+
+    // Cluster definitions — these are the "discovered" groups
+    const CLUSTERS = [
+      { label: 'Mechatronics',     color: [201, 168, 76] },    // gold
+      { label: 'Computer Vision',  color: [107, 141, 173] },   // steel blue
+      { label: 'Robotics',         color: [91, 166, 138] },    // teal
+      { label: 'Machine Learning', color: [212, 149, 107] },   // warm amber
+      { label: 'Industrial AI',    color: [139, 125, 184] },   // lavender
+    ];
+
+    const POINT_COUNT = 65;
+    let ANIMATION_START = 0;
+
+    // Timing (milliseconds)
+    const T = {
+      SCATTER_END: 1600,       // Phase 1 ends (shortened)
+      EDGES_START: 1100,       // Phase 2: edges begin appearing
+      EDGES_FULL: 4200,        // Phase 2: all local edges visible
+      CLUSTER_START: 2600,     // Phase 3: drift begins
+      CLUSTER_DONE: 7800,      // Phase 3: clusters formed
+      BRIDGE_START: 7800,      // Phase 4: inter-cluster links
+      BRIDGE_DONE: 10200,      // Phase 4: bridges visible
+      LABELS_START: 8800,      // Phase 5: labels fade in
+    };
+
+    let points = [];
+    let clusterCenters = [];
+
+    function resize() {
+      W = canvas.width = canvas.offsetWidth;
+      H = canvas.height = canvas.offsetHeight;
+      init();
+    }
+
+    function init() {
+      points = [];
+      clusterCenters = [];
+
+      // Generate cluster target positions (spread across canvas, avoiding hero text area)
+      // Hero content is roughly in the left-center, so bias clusters to right and edges
+      const margin = 80;
+      const zones = [
+        { x: W * 0.85, y: H * 0.12 },   // top-right
+        { x: W * 0.78, y: H * 0.50 },   // mid-right
+        { x: W * 0.12, y: H * 0.12 },   // top-left
+        { x: W * 0.50, y: H * 0.10 },   // top-center
+        { x: W * 0.15, y: H * 0.55 },   // mid-left
+      ];
+
+      CLUSTERS.forEach((c, ci) => {
+        const zone = zones[ci];
+        clusterCenters.push({
+          x: zone.x,
+          y: zone.y,
+          label: c.label,
+          color: c.color,
+        });
+      });
+
+      // Create points with random initial positions and assigned cluster targets
+      for (let i = 0; i < POINT_COUNT; i++) {
+        const clusterIdx = i % CLUSTERS.length;
+        const center = clusterCenters[clusterIdx];
+        // Target position: near cluster center with some spread
+        const spread = 45 + Math.random() * 35;
+        const angle = Math.random() * Math.PI * 2;
+        const tx = center.x + Math.cos(angle) * spread;
+        const ty = center.y + Math.sin(angle) * spread;
+
+        points.push({
+          // Random start position (Phase 1)
+          sx: margin + Math.random() * (W - margin * 2),
+          sy: margin + Math.random() * (H - margin * 2),
+          // Target clustered position (Phase 3+)
+          tx: tx,
+          ty: ty,
+          // Current position (interpolated)
+          x: 0,
+          y: 0,
+          cluster: clusterIdx,
+          r: 1.5 + Math.random() * 1.2,
+          // Small ambient drift velocity
+          dvx: (Math.random() - 0.5) * 0.12,
+          dvy: (Math.random() - 0.5) * 0.12,
+          // Appearance delay (stagger the scatter)
+          appearAt: Math.random() * 800,
+        });
+      }
+    }
+
+    // Easing: smooth step
+    function smoothstep(t) {
+      t = Math.max(0, Math.min(1, t));
+      return t * t * (3 - 2 * t);
+    }
+
+    function draw(now) {
+      const elapsed = now - ANIMATION_START;
+      ctx.clearRect(0, 0, W, H);
+
+      // ---- Compute current positions ----
+      const clusterProgress = smoothstep((elapsed - T.CLUSTER_START) / (T.CLUSTER_DONE - T.CLUSTER_START));
+
+      points.forEach(p => {
+        // Appearance: fade in during scatter phase
+        p.visible = elapsed > p.appearAt;
+        if (!p.visible) return;
+
+        // Interpolate between random position and cluster position
+        p.x = p.sx + (p.tx - p.sx) * clusterProgress;
+        p.y = p.sy + (p.ty - p.sy) * clusterProgress;
+
+        // Add ambient drift after clustering
+        if (clusterProgress > 0.8 && !REDUCED) {
+          p.x += Math.sin(now * 0.0004 + p.tx) * 2;
+          p.y += Math.cos(now * 0.0005 + p.ty) * 2;
+        }
+      });
+
+      // ---- Phase 2: Draw local edges ----
+      const edgeProgress = smoothstep((elapsed - T.EDGES_START) / (T.EDGES_FULL - T.EDGES_START));
+      if (edgeProgress > 0) {
+        // During clustering, only connect within-cluster points
+        // Before clustering, connect nearest neighbors regardless
+        const maxEdgeDist = 120 - clusterProgress * 30; // tighten as clusters form
+        const visiblePoints = points.filter(p => p.visible);
+
+        for (let i = 0; i < visiblePoints.length; i++) {
+          for (let j = i + 1; j < visiblePoints.length; j++) {
+            const a = visiblePoints[i], b = visiblePoints[j];
+            const dx = a.x - b.x;
+            const dy = a.y - b.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (dist > maxEdgeDist) continue;
+
+            // After clustering starts, fade out cross-cluster edges
+            const sameCluster = a.cluster === b.cluster;
+            let alpha;
+            if (sameCluster) {
+              alpha = edgeProgress * (1 - dist / maxEdgeDist) * 0.12;
+            } else {
+              // Cross-cluster edges: appear early, fade as clusters form
+              alpha = edgeProgress * (1 - clusterProgress) * (1 - dist / maxEdgeDist) * 0.06;
+            }
+            if (alpha < 0.003) continue;
+
+            // Color: blend toward cluster color as clustering progresses
+            const c = CLUSTERS[a.cluster].color;
+            const r = Math.round(200 + (c[0] - 200) * clusterProgress);
+            const g = Math.round(200 + (c[1] - 200) * clusterProgress);
+            const bl = Math.round(200 + (c[2] - 200) * clusterProgress);
+
+            ctx.strokeStyle = `rgba(${r},${g},${bl},${alpha})`;
+            ctx.lineWidth = 0.6;
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(b.x, b.y);
+            ctx.stroke();
+          }
+        }
+      }
+
+      // ---- Phase 4: Inter-cluster bridges ----
+      const bridgeProgress = smoothstep((elapsed - T.BRIDGE_START) / (T.BRIDGE_DONE - T.BRIDGE_START));
+      if (bridgeProgress > 0) {
+        // Connect cluster centers
+        const bridges = [[0,1],[1,2],[2,3],[3,4],[4,0],[0,3],[1,4]];
+        bridges.forEach(([a, b]) => {
+          const ca = clusterCenters[a], cb = clusterCenters[b];
+          const alpha = bridgeProgress * 0.06;
+          ctx.strokeStyle = `rgba(201, 168, 76, ${alpha})`;
+          ctx.lineWidth = 1;
+          ctx.setLineDash([4, 6]);
+          ctx.beginPath();
+          ctx.moveTo(ca.x, ca.y);
+          ctx.lineTo(cb.x, cb.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        });
+      }
+
+      // ---- Draw points ----
+      points.forEach(p => {
+        if (!p.visible) return;
+
+        const appearProgress = smoothstep((elapsed - p.appearAt) / 600);
+        const c = CLUSTERS[p.cluster].color;
+
+        // Color transitions: white → cluster color
+        const r = Math.round(220 + (c[0] - 220) * clusterProgress);
+        const g = Math.round(220 + (c[1] - 220) * clusterProgress);
+        const bl = Math.round(220 + (c[2] - 220) * clusterProgress);
+
+        const baseAlpha = 0.15 + clusterProgress * 0.35;
+        const alpha = appearProgress * baseAlpha;
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r * (0.5 + appearProgress * 0.5), 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${r},${g},${bl},${alpha})`;
+        ctx.fill();
+
+        // Glow ring after clustering
+        if (clusterProgress > 0.5) {
+          const glowAlpha = (clusterProgress - 0.5) * 2 * alpha * 0.15;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.r + 4, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(${r},${g},${bl},${glowAlpha})`;
+          ctx.fill();
+        }
+      });
+
+      // ---- Phase 5: Cluster center anchors (no text — let the visual speak) ----
+      const labelProgress = smoothstep((elapsed - T.LABELS_START) / 2000);
+      if (labelProgress > 0) {
+        clusterCenters.forEach((cc, ci) => {
+          const c = CLUSTERS[ci].color;
+          // Subtle center dot
+          ctx.beginPath();
+          ctx.arc(cc.x, cc.y, 3, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${labelProgress * 0.3})`;
+          ctx.fill();
+          // Soft halo
+          ctx.beginPath();
+          ctx.arc(cc.x, cc.y, 14, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${labelProgress * 0.04})`;
+          ctx.fill();
+        });
+      }
+
+      if (!REDUCED) {
+        requestAnimationFrame(draw);
+      }
+    }
+
+    function start() {
+      resize();
+      // Guard: if canvas still has no dimensions, retry
+      if (W < 10 || H < 10) {
+        setTimeout(start, 100);
+        return;
+      }
+      ANIMATION_START = performance.now();
+      if (REDUCED) {
+        draw(ANIMATION_START + 20000);
+      } else {
+        requestAnimationFrame(draw);
+      }
+    }
+
+    // Wait for layout: rAF ensures at least one paint has happened
+    requestAnimationFrame(() => { requestAnimationFrame(start); });
+
+    window.addEventListener('resize', () => { resize(); });
+  })();
+
+  // ---- Hero epigraph: fade in after the dots connect ----
+  (function() {
+    const q = document.getElementById('heroQuote');
+    if (!q) return;
+    const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (REDUCED) { q.classList.add('visible'); return; }
+    setTimeout(() => q.classList.add('visible'), 9200);
+  })();
+
+  // ---- Sticky nav ----
+  (function() {
+    const nav = document.getElementById('stickyNav');
+    const hero = document.querySelector('.hero');
+    const observer = new IntersectionObserver(([entry]) => {
+      nav.classList.toggle('visible', !entry.isIntersecting);
+    }, { threshold: 0 });
+    observer.observe(hero);
+  })();
+
+  // ---- Scroll reveal ----
+  (function() {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const els = document.querySelectorAll('.reveal');
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) { e.target.classList.add('visible'); observer.unobserve(e.target); }
+      });
+    }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+    els.forEach(el => observer.observe(el));
+  })();
+  </script>
+
+</body>
+</html>
