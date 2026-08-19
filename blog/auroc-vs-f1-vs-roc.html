@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Radar Operator's Problem — A Field Guide to AUROC · Aakash Vanmali</title>
+<meta name="description" content="Why a 90%-accurate model can be worthless, and why AUROC — born from WWII radar signal detection — is still the best way to judge whether a classifier can tell signal from noise.">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root{
+    --ink:#0B1222; --ink-light:#111B2E; --ink-surface:#162038;
+    --gold:#C9A84C; --gold-dim:rgba(201,168,76,0.15); --gold-glow:rgba(201,168,76,0.08);
+    --paper:#F6F2E8; --paper-white:#FDFBF5;
+    --text-dark:#1A1A1A; --text-mid:#4A4A4A; --text-light:#777;
+    --text-on-ink:#C8C8D4; --text-bright:#E8E8F0;
+    --border-paper:#E0D8C8; --border-ink:rgba(255,255,255,0.08);
+    --serif:'Cormorant Garamond', Georgia, serif;
+    --sans:'Space Grotesk', -apple-system, sans-serif;
+    --mono:'JetBrains Mono', monospace;
+    --max-w:780px;
+    --ease: cubic-bezier(0.25,0.46,0.45,0.94);
+    /* class palette, borrowed from the homepage cluster animation */
+    --teal:#5BA68A;      /* signal / positive */
+    --steel:#6B8DAD;     /* noise / negative */
+    --amber:#D4956B;     /* false positive */
+    --lavender:#8B7DB8;  /* false negative */
+  }
+  html{ font-size:17px; scroll-behavior:smooth; }
+  body{ font-family:var(--sans); color:var(--text-dark); background:var(--paper); line-height:1.7; -webkit-font-smoothing:antialiased; }
+  ::selection{ background:var(--gold); color:var(--ink); }
+  a{ color:var(--gold); text-decoration:none; transition:color .2s; }
+  a:hover{ text-decoration:underline; }
+
+  /* ===== TOPBAR ===== */
+  .topbar{ background:var(--ink); padding:1.1rem 0; }
+  .topbar-inner{ max-width:var(--max-w); margin:0 auto; padding:0 2rem; display:flex; justify-content:space-between; align-items:center; }
+  .topbar-name{ font-family:var(--serif); font-weight:600; font-size:1.15rem; color:var(--text-on-ink); }
+  .topbar-name span{ color:var(--gold); }
+  .topbar-links{ display:flex; gap:1.4rem; }
+  .topbar-links a{ font-family:var(--mono); font-size:0.72rem; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-on-ink); opacity:0.75; }
+  .topbar-links a:hover{ color:var(--gold); opacity:1; text-decoration:none; }
+
+  /* ===== HERO ===== */
+  .hero{ background:var(--ink); padding: 4.5rem 0 4rem; position:relative; overflow:hidden; }
+  .hero::after{
+    content:''; position:absolute; top:-20%; right:-10%; width:480px; height:480px; border-radius:50%;
+    background:radial-gradient(circle, rgba(201,168,76,0.10), transparent 70%);
+  }
+  .hero-inner{ max-width:var(--max-w); margin:0 auto; padding:0 2rem; position:relative; }
+  .hero-eyebrow{ font-family:var(--mono); font-size:0.7rem; letter-spacing:0.2em; text-transform:uppercase; color:var(--gold); margin-bottom:1.2rem; }
+  .hero h1{ font-family:var(--serif); font-weight:600; font-size:3rem; color:var(--text-bright); line-height:1.1; letter-spacing:-0.01em; margin-bottom:1rem; max-width:640px; }
+  .hero-dek{ font-family:var(--serif); font-style:italic; font-size:1.25rem; color:rgba(201,168,76,0.85); max-width:520px; line-height:1.5; }
+  .hero-meta{ font-family:var(--mono); font-size:0.68rem; letter-spacing:0.08em; text-transform:uppercase; color:rgba(200,200,212,0.4); margin-top:2rem; }
+
+  /* ===== CONTENT ===== */
+  .content{ max-width:var(--max-w); margin:0 auto; padding:0 2rem; }
+  article{ padding:3.5rem 0 1rem; }
+  .section-header{ display:flex; align-items:center; gap:1rem; margin: 3.4rem 0 1.6rem; }
+  .section-header:first-of-type{ margin-top:0; }
+  .section-number{ font-family:var(--serif); font-size:2rem; font-weight:300; color:var(--gold); line-height:1; opacity:0.6; }
+  .section-title{ font-family:var(--serif); font-size:1.5rem; font-weight:600; color:var(--text-dark); letter-spacing:-0.01em; }
+  .section-rule{ flex:1; height:1px; background:var(--border-paper); }
+
+  p{ margin:0 0 1.15rem; font-size:0.98rem; color:var(--text-mid); }
+  p.lead{ font-family:var(--serif); font-size:1.35rem; font-style:italic; color:var(--text-dark); line-height:1.6; }
+  strong{ color:var(--text-dark); font-weight:600; }
+  em{ color:var(--text-dark); }
+
+  code{ font-family:var(--mono); background:var(--paper-white); border:1px solid var(--border-paper); padding:1px 6px; font-size:0.85em; color:var(--gold); border-radius:2px; }
+
+  .formula-block{
+    font-family:var(--mono); background:var(--paper-white); border:1px solid var(--border-paper); border-left:3px solid var(--gold);
+    padding:1rem 1.3rem; margin:1.3rem 0; font-size:0.92rem; color:var(--text-dark); overflow-x:auto;
+  }
+  .formula-block .name{ font-family:var(--sans); font-weight:600; color:var(--gold); font-size:0.78rem; letter-spacing:0.04em; text-transform:uppercase; display:block; margin-bottom:0.3rem;}
+  .formula-block .sub{ font-family:var(--sans); color:var(--text-light); font-size:0.8rem; margin-top:0.5rem; }
+
+  blockquote{ margin:1.8rem 0; padding:0.2rem 0 0.2rem 1.3rem; border-left:2px solid var(--gold); font-family:var(--serif); font-style:italic; color:var(--text-mid); font-size:1.15rem; }
+
+  hr.rule{ border:none; border-top:1px solid var(--border-paper); margin:3rem 0; }
+
+  .callout{ background:var(--paper-white); border:1px solid var(--border-paper); border-left:3px solid var(--steel); padding:1rem 1.3rem; margin:1.5rem 0; font-size:0.92rem; color:var(--text-mid); }
+  .callout strong{ color:var(--steel); }
+
+  .cap{ font-family:var(--mono); font-size:0.68rem; color:var(--text-light); letter-spacing:0.02em; margin-top:0.6rem; text-align:center; }
+
+  /* bar demo */
+  .panel{ background:var(--paper-white); border:1px solid var(--border-paper); padding:1.4rem 1.6rem; }
+  .bar-row{ display:flex; align-items:center; gap:0.9rem; margin-bottom:0.8rem; }
+  .bar-row:last-child{ margin-bottom:0; }
+  .bar-label{ font-family:var(--mono); font-size:0.68rem; color:var(--text-light); width:80px; flex-shrink:0; text-align:right; }
+  .bar-track{ flex:1; height:22px; background:rgba(0,0,0,0.04); border:1px solid var(--border-paper); }
+  .bar-fill{ height:100%; display:flex; align-items:center; justify-content:flex-end; padding-right:8px; font-family:var(--mono); font-size:0.65rem; font-weight:600; color:#fff; }
+
+  .stat-pair{ display:flex; gap:1rem; margin:1.4rem 0; flex-wrap:wrap; }
+  .stat-card{ flex:1; min-width:150px; background:var(--paper-white); border:1px solid var(--border-paper); padding:1rem 1.2rem; }
+  .stat-card .num{ font-family:var(--serif); font-size:2rem; font-weight:700; }
+  .stat-card .lbl{ font-family:var(--mono); font-size:0.65rem; color:var(--text-light); text-transform:uppercase; letter-spacing:0.05em; margin-top:0.2rem;}
+  .stat-card.good .num{ color:var(--teal); }
+  .stat-card.bad .num{ color:var(--lavender); }
+
+  .roc-static{ display:flex; justify-content:center; margin:1.6rem 0; }
+
+  /* ===== INTERACTIVE CONSOLE (dark, ink-toned like hero/footer) ===== */
+  .console{ background:var(--ink); border-radius:2px; padding:1.8rem 1.6rem 2rem; margin:2rem 0 1rem; position:relative; overflow:hidden; }
+  .console::before{ content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--gold); }
+  .console-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:1.2rem; flex-wrap:wrap; gap:0.6rem; }
+  .console-title{ font-family:var(--mono); font-size:0.72rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--gold); display:flex; align-items:center; gap:0.5rem; }
+  .console-title .dot{ width:6px; height:6px; border-radius:50%; background:var(--gold); animation:blink 2s infinite; }
+  @keyframes blink{ 50%{ opacity:0.3; } }
+  .console-sub{ font-family:var(--mono); font-size:0.64rem; color:rgba(200,200,212,0.4); }
+
+  .console-grid{ display:grid; grid-template-columns:1.1fr 1fr; gap:1.3rem; }
+  @media (max-width:720px){ .console-grid{ grid-template-columns:1fr; } }
+
+  .console-block{ background:rgba(255,255,255,0.03); border:1px solid var(--border-ink); padding:0.9rem 1rem; }
+  .console-block h4{ font-family:var(--mono); font-size:0.62rem; text-transform:uppercase; letter-spacing:0.08em; color:rgba(200,200,212,0.55); margin:0 0 0.7rem; font-weight:500; }
+
+  .slider-row{ margin:1rem 0 0.3rem; }
+  .slider-row label{ font-family:var(--mono); font-size:0.68rem; color:rgba(200,200,212,0.6); display:flex; justify-content:space-between; margin-bottom:0.5rem;}
+  .slider-row label span{ color:var(--gold); font-weight:600; }
+  input[type=range]{ width:100%; -webkit-appearance:none; appearance:none; height:3px; border-radius:2px; background:rgba(255,255,255,0.15); outline:none; }
+  input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:15px; height:15px; border-radius:50%; background:var(--gold); cursor:pointer; box-shadow:0 0 0 3px rgba(201,168,76,0.25); border:1px solid var(--ink); }
+  input[type=range]::-moz-range-thumb{ width:15px; height:15px; border-radius:50%; background:var(--gold); cursor:pointer; border:1px solid var(--ink); }
+
+  .cm-grid{ display:grid; grid-template-columns:auto 1fr 1fr; gap:1px; background:var(--border-ink); font-family:var(--mono); font-size:0.72rem; margin-top:0.5rem; }
+  .cm-grid > div{ background:var(--ink-light); padding:0.6rem 0.4rem; text-align:center; }
+  .cm-grid .hd{ background:var(--ink-surface); color:rgba(200,200,212,0.55); font-size:0.6rem; text-transform:uppercase; letter-spacing:0.03em;}
+  .cm-grid .rowlbl{ background:var(--ink-surface); color:rgba(200,200,212,0.55); font-size:0.6rem; display:flex; align-items:center; justify-content:center; writing-mode:vertical-rl; text-transform:uppercase; letter-spacing:0.04em;}
+  .cm-grid .val{ font-family:var(--serif); font-size:1.25rem; font-weight:700; }
+  .cm-grid .tp .val{ color:var(--teal); }
+  .cm-grid .tn .val{ color:var(--steel); }
+  .cm-grid .fp .val{ color:var(--amber); }
+  .cm-grid .fn .val{ color:var(--lavender); }
+
+  .metric-list{ display:grid; grid-template-columns:1fr 1fr; gap:0.6rem; margin-top:0.9rem; }
+  .metric{ background:var(--ink-light); border:1px solid var(--border-ink); padding:0.6rem 0.7rem; }
+  .metric .m-lbl{ font-family:var(--mono); font-size:0.6rem; color:rgba(200,200,212,0.5); text-transform:uppercase; letter-spacing:0.04em;}
+  .metric .m-val{ font-family:var(--serif); font-size:1.3rem; font-weight:700; color:var(--text-bright); margin-top:0.1rem;}
+
+  canvas{ display:block; width:100%; height:auto; }
+  .legend{ display:flex; gap:1rem; flex-wrap:wrap; margin-top:0.6rem; font-family:var(--mono); font-size:0.62rem; color:rgba(200,200,212,0.55);}
+  .legend span{ display:inline-flex; align-items:center; gap:0.35rem; }
+  .swatch{ width:9px; height:9px; display:inline-block; border-radius:1px; }
+
+  .auroc-readout{ text-align:center; margin-top:0.8rem; }
+  .auroc-readout .big{ font-family:var(--serif); font-size:2.4rem; font-weight:700; color:var(--gold); }
+  .auroc-readout .tag{ font-family:var(--mono); font-size:0.6rem; color:rgba(200,200,212,0.5); text-transform:uppercase; letter-spacing:0.06em;}
+
+  /* ===== TABLE ===== */
+  table{ width:100%; border-collapse:collapse; margin:1.4rem 0; font-size:0.9rem; }
+  th,td{ text-align:left; padding:0.65rem 0.6rem; border-bottom:1px solid var(--border-paper); }
+  th{ font-family:var(--mono); font-size:0.62rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-light); font-weight:500;}
+  td{ color:var(--text-mid); }
+  td.metric-name{ color:var(--text-dark); font-weight:600; font-family:var(--sans); }
+  tr:last-child td{ border-bottom:none; }
+
+  .scale-bar{ display:flex; height:28px; overflow:hidden; margin:1.2rem 0 0.4rem; font-family:var(--mono); font-size:0.62rem; }
+  .scale-bar div{ display:flex; align-items:center; justify-content:center; color:#fff; }
+  .scale-ticks{ display:flex; justify-content:space-between; font-family:var(--mono); font-size:0.62rem; color:var(--text-light); }
+
+  /* ===== FOOTER ===== */
+  footer{ background:var(--ink); color:var(--text-on-ink); margin-top:3rem; }
+  .footer-inner{ max-width:var(--max-w); margin:0 auto; padding:2.6rem 2rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; }
+  .footer-left{ font-family:var(--serif); font-size:1.1rem; }
+  .footer-left span{ color:var(--gold); }
+  .footer-links{ display:flex; gap:1.3rem; }
+  .footer-links a{ font-size:0.8rem; color:var(--text-on-ink); opacity:0.6; }
+  .footer-links a:hover{ opacity:1; color:var(--gold); text-decoration:none; }
+  .footer-note{ max-width:var(--max-w); margin:0 auto; padding:0 2rem 1.6rem; font-family:var(--mono); font-size:0.62rem; color:rgba(200,200,212,0.3); }
+
+  @media (max-width:640px){
+    .hero h1{ font-size:2.1rem; }
+    .hero-dek{ font-size:1.05rem; }
+    .content{ padding:0 1.2rem; }
+    .topbar-inner{ padding:0 1.2rem; }
+    .hero-inner{ padding:0 1.2rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="topbar-name">Aakash <span>Vanmali</span></div>
+    <div class="topbar-links">
+      <a href="index.html">Writing</a>
+      <a href="../index.html">Portfolio</a>
+    </div>
+  </div>
+</div>
+
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-eyebrow">Notebook · Model Evaluation</div>
+    <h1>The Radar Operator's Problem</h1>
+    <p class="hero-dek">Why a 90%-accurate model can be worthless, and why the metric built for WWII radar screens is still the best way to judge whether a classifier can tell signal from noise.</p>
+    <div class="hero-meta">AUROC · ROC · Precision · Recall · F1 · Balanced Accuracy</div>
+  </div>
+</div>
+
+<div class="content">
+  <article>
+
+    <p class="lead">In 1941, radar operators on the English coast stared at flickering screens trying to answer one question, fast: is that blip an incoming aircraft, or noise — a flock of birds, a weather front, a ghost in the electronics? Set your sensitivity too high, and you scramble fighters at every seagull. Set it too low, and a real bomber slips through. Every operator was, without knowing it, choosing a <strong>threshold</strong>.</p>
+
+    <p>That problem got a name — <strong>Receiver Operating Characteristic</strong>, or <strong>ROC</strong> — and decades later it became one of the most useful ideas in machine learning. Today your spam filter, your fraud detector, and your defect classifier all face the exact same dilemma the radar operators did. This is a field guide to how we measure whether they're any good at it — and where the usual scoreboard, <em>accuracy</em>, quietly lies to you.</p>
+
+    <div class="section-header">
+      <span class="section-number">01</span>
+      <span class="section-title">The problem with a single number</span>
+      <span class="section-rule"></span>
+    </div>
+    <p>Say you're building a classifier and your test set has <strong>90 positive</strong> samples and <strong>10 negative</strong> ones. Now imagine the laziest possible model: it never looks at the input. It just predicts <em>positive</em>, every single time.</p>
+
+    <div class="panel">
+      <div class="bar-row">
+        <div class="bar-label">Test set</div>
+        <div class="bar-track"><div class="bar-fill" style="width:90%; background:var(--teal);">90 positive</div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label"></div>
+        <div class="bar-track"><div class="bar-fill" style="width:10%; background:var(--steel);">10 neg</div></div>
+      </div>
+    </div>
+
+    <p style="margin-top:1.2rem;">This model that has learned <em>nothing</em> gets:</p>
+    <div class="stat-pair">
+      <div class="stat-card good"><div class="num">90%</div><div class="lbl">Accuracy</div></div>
+      <div class="stat-card bad"><div class="num">0%</div><div class="lbl">Recall on the negative class</div></div>
+    </div>
+    <p>It never once identifies a negative case — the class you probably cared about most, whether that's fraud, a defective part, or a rare disease — and it still walks away with a 90% score. <strong>Accuracy is only honest when your classes are roughly balanced.</strong> The moment one class dominates, a model can look brilliant while being completely blind to the thing you built it to catch.</p>
+    <p>So we need metrics that look inside the confusion matrix instead of collapsing it into one number.</p>
+
+    <div class="section-header">
+      <span class="section-number">02</span>
+      <span class="section-title">Precision and recall enter the room</span>
+      <span class="section-rule"></span>
+    </div>
+    <p>Every prediction a binary classifier makes lands in one of four buckets: a <strong>true positive</strong> (correctly flagged), a <strong>false positive</strong> (false alarm), a <strong>true negative</strong> (correctly ignored), or a <strong>false negative</strong> (missed). Precision and recall each ask a different question about those buckets.</p>
+
+    <div class="formula-block">
+      <span class="name">Precision</span> = TP / (TP + FP)
+      <div class="sub">Of everything I flagged as positive, how much of it was actually positive? — a measure of how much you trust an alarm.</div>
+    </div>
+    <div class="formula-block">
+      <span class="name">Recall</span> = TP / (TP + FN)
+      <div class="sub">Of everything that was actually positive, how much did I actually catch? — a measure of how much slips past you.</div>
+    </div>
+
+    <p>Both are computed at <strong>one fixed threshold</strong> — the cutoff score above which the model calls something "positive." That's exactly their strength and their limitation: they tell you how the model behaves at the operating point you chose, but say nothing about whether a <em>better</em> operating point exists.</p>
+
+    <div class="section-header">
+      <span class="section-number">03</span>
+      <span class="section-title">F1: a photograph, not a movie</span>
+      <span class="section-rule"></span>
+    </div>
+    <p>Precision and recall usually trade off against each other: flag more things positive and recall climbs while precision falls, and vice versa. <strong>F1</strong> is the harmonic mean of the two, a single number that punishes you if either one is weak.</p>
+    <div class="formula-block">
+      <span class="name">F1</span> = 2 × (Precision × Recall) / (Precision + Recall)
+      <div class="sub">A balanced score of a model's performance — but still tied to whatever threshold you picked to compute precision and recall.</div>
+    </div>
+    <p>That's the catch. F1 is a <strong>photograph</strong> of performance at one threshold, not a movie of how the model behaves across all of them. Change the threshold, and F1 changes too — sometimes a lot. If two models are being compared and each was evaluated at its own "best" threshold, F1 alone can't tell you which one is fundamentally better at separating the classes, only which one you tuned better.</p>
+
+    <blockquote>That's the gap AUROC was built to fill: a score for how well a model separates the two classes, independent of any single threshold you happen to choose.</blockquote>
+
+    <div class="section-header">
+      <span class="section-number">04</span>
+      <span class="section-title">Enter the ROC curve</span>
+      <span class="section-rule"></span>
+    </div>
+    <p>Instead of freezing the threshold and reporting one point, the ROC curve asks: <em>what happens at every possible threshold, from "flag almost nothing" to "flag almost everything"?</em> At each threshold we plot two rates:</p>
+
+    <div class="formula-block">
+      <span class="name">TPR</span> (True Positive Rate / Recall) = TP / (TP + FN)
+      <div class="sub">Of the real positives, what fraction did we catch at this threshold?</div>
+    </div>
+    <div class="formula-block">
+      <span class="name">FPR</span> (False Positive Rate) = FP / (FP + TN)
+      <div class="sub">Of the real negatives, what fraction did we wrongly flag at this threshold?</div>
+    </div>
+
+    <p>Plot <strong>TPR on the y-axis</strong> against <strong>FPR on the x-axis</strong> as the threshold sweeps from 1 down to 0, and you get a curve. At threshold = 1, nothing is flagged: TPR = FPR = 0, bottom-left corner. At threshold = 0, everything is flagged: TPR = FPR = 1, top-right corner. Everything in between traces out how the model trades false alarms for catches as you loosen the trigger.</p>
+
+    <div class="roc-static">
+      <svg width="340" height="300" viewBox="0 0 340 300">
+        <line x1="46" y1="16" x2="46" y2="250" stroke="#D8CFBC" stroke-width="1"/>
+        <line x1="46" y1="250" x2="310" y2="250" stroke="#D8CFBC" stroke-width="1"/>
+        <line x1="46" y1="250" x2="310" y2="16" stroke="#B7ACA0" stroke-width="1.2" stroke-dasharray="4 5"/>
+        <path d="M 46 250 L 51 188 L 65 142 L 92 104 L 138 76 L 202 52 L 276 30 L 310 16"
+              fill="none" stroke="#6B8DAD" stroke-width="2.4"/>
+        <path d="M 46 250 L 51 188 L 65 142 L 92 104 L 138 76 L 202 52 L 276 30 L 310 16 L 310 250 Z"
+              fill="#6B8DAD" opacity="0.10"/>
+        <text x="178" y="278" fill="#777" font-family="JetBrains Mono" font-size="10.5" text-anchor="middle">FPR — false alarm rate →</text>
+        <text x="16" y="140" fill="#777" font-family="JetBrains Mono" font-size="10.5" text-anchor="middle" transform="rotate(-90 16 140)">↑ TPR — catch rate</text>
+        <text x="228" y="140" fill="#9A9186" font-family="JetBrains Mono" font-size="9.5" text-anchor="middle" transform="rotate(-38 228 140)">random guessing</text>
+        <circle cx="138" cy="76" r="3.5" fill="#C9A84C"/>
+      </svg>
+    </div>
+    <p class="cap">A ROC curve: each point is one threshold's (FPR, TPR). The diagonal is what a coin flip achieves.</p>
+
+    <p>A model with zero skill — random guessing — produces the diagonal line: whatever false-alarm rate you accept, your catch rate is exactly the same. A useful model bows up toward the top-left corner: high catch rate, low false-alarm rate, for as much of the sweep as possible.</p>
+
+    <hr class="rule">
+
+    <div class="section-header">
+      <span class="section-number">05</span>
+      <span class="section-title">AUROC: the area under everything</span>
+      <span class="section-rule"></span>
+    </div>
+    <p><strong>AUROC</strong> — Area Under the ROC Curve — collapses that entire curve into a single number between 0 and 1. It has a wonderfully clean interpretation:</p>
+    <div class="callout"><strong>AUROC is the probability that a randomly chosen positive example scores higher than a randomly chosen negative example.</strong> Pick one item from each class, ask the model to score both — AUROC is how often it ranks the positive one above the negative one.</div>
+
+    <p>Because it's built from TPR and FPR summed across <em>every</em> threshold, AUROC doesn't care which threshold you'll eventually deploy at. It only asks whether the model's scores separate the two classes at all — which makes it especially useful when you don't yet know your operating threshold, or when you're comparing two models before either has been tuned.</p>
+
+    <div class="scale-bar">
+      <div style="width:20%; background:#B7ACA0;">random</div>
+      <div style="width:20%; background:var(--amber);">poor</div>
+      <div style="width:20%; background:var(--gold);">acceptable</div>
+      <div style="width:20%; background:var(--steel);">excellent</div>
+      <div style="width:20%; background:var(--teal);">outstanding</div>
+    </div>
+    <div class="scale-ticks"><span>0.5</span><span>0.6</span><span>0.7</span><span>0.8</span><span>0.9</span><span>1.0</span></div>
+
+    <table>
+      <tr><th>AUROC</th><th>Reading</th></tr>
+      <tr><td class="metric-name">0.5</td><td>No separation — same as flipping a coin.</td></tr>
+      <tr><td class="metric-name">~0.7</td><td>Reasonable — the model has learned something real.</td></tr>
+      <tr><td class="metric-name">~0.9</td><td>Very strong separation between classes.</td></tr>
+      <tr><td class="metric-name">1.0</td><td>Perfect — every positive outranks every negative.</td></tr>
+    </table>
+
+    <p>This is also why AUROC shows up so often in zero-shot and open-set evaluation: even before you've picked a deployment threshold, it tells you whether the underlying scores <em>can</em> distinguish positive from negative at all.</p>
+
+    <hr class="rule">
+
+    <div class="section-header">
+      <span class="section-number">—</span>
+      <span class="section-title">Try it — Detection Console</span>
+      <span class="section-rule"></span>
+    </div>
+    <p>Below are 120 synthetic samples scored by a classifier — 60 real "signals," 60 real "noise." Drag the threshold and watch how one number (the threshold) reshapes accuracy, precision, recall and F1 — while the ROC curve and the AUROC number underneath it never move at all. <strong>That's the whole point of AUROC:</strong> it's the one score that doesn't depend on where you set the dial.</p>
+  </article>
+</div>
+
+<div style="max-width: 1000px; margin: 0 auto; padding: 0 1.5rem;">
+  <div class="console">
+    <div class="console-head">
+      <div class="console-title"><span class="dot"></span> Live threshold simulator</div>
+      <div class="console-sub">120 synthetic samples · 60 signal / 60 noise</div>
+    </div>
+
+    <div class="console-grid">
+      <div>
+        <div class="console-block">
+          <h4>Score distribution</h4>
+          <canvas id="histCanvas" width="640" height="200"></canvas>
+          <div class="legend">
+            <span><span class="swatch" style="background:#5BA68A;"></span>signal (positive)</span>
+            <span><span class="swatch" style="background:#6B8DAD;"></span>noise (negative)</span>
+            <span><span class="swatch" style="background:#C9A84C;"></span>threshold</span>
+          </div>
+          <div class="slider-row">
+            <label>Threshold <span id="threshLabel">0.50</span></label>
+            <input type="range" id="threshSlider" min="0" max="1" step="0.01" value="0.5">
+          </div>
+        </div>
+
+        <div class="console-block" style="margin-top:1rem;">
+          <h4>Confusion matrix at this threshold</h4>
+          <div class="cm-grid">
+            <div></div><div class="hd">Predicted +</div><div class="hd">Predicted −</div>
+            <div class="rowlbl">Actual +</div>
+            <div class="tp"><div class="val" id="tpVal">–</div></div>
+            <div class="fn"><div class="val" id="fnVal">–</div></div>
+            <div class="rowlbl">Actual −</div>
+            <div class="fp"><div class="val" id="fpVal">–</div></div>
+            <div class="tn"><div class="val" id="tnVal">–</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="console-block">
+          <h4>ROC curve — fixed, no matter the slider</h4>
+          <canvas id="rocCanvas" width="420" height="280"></canvas>
+          <div class="auroc-readout">
+            <div class="big" id="aurocVal">–</div>
+            <div class="tag">AUROC — constant</div>
+          </div>
+        </div>
+
+        <div class="console-block" style="margin-top:1rem;">
+          <h4>Threshold-dependent metrics</h4>
+          <div class="metric-list">
+            <div class="metric"><div class="m-lbl">Accuracy</div><div class="m-val" id="accVal">–</div></div>
+            <div class="metric"><div class="m-lbl">Precision</div><div class="m-val" id="precVal">–</div></div>
+            <div class="metric"><div class="m-lbl">Recall / TPR</div><div class="m-val" id="recVal">–</div></div>
+            <div class="metric"><div class="m-lbl">F1 score</div><div class="m-val" id="f1Val">–</div></div>
+            <div class="metric"><div class="m-lbl">FPR</div><div class="m-val" id="fprVal">–</div></div>
+            <div class="metric"><div class="m-lbl">Balanced Acc.</div><div class="m-val" id="balAccVal">–</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="content">
+  <article>
+    <p style="margin-top:1.6rem;">Push the threshold to the far right and precision climbs toward 1.0 while recall collapses — you're only flagging the samples you're most sure about, and missing everything else. Push it to the far left and recall climbs toward 1.0 while precision collapses — you're catching everything, including a flood of false alarms. F1 peaks somewhere in the middle. AUROC just sits there, unmoved, because it already accounts for the whole sweep.</p>
+
+    <hr class="rule">
+
+    <div class="section-header">
+      <span class="section-number">06</span>
+      <span class="section-title">When the minority class matters equally</span>
+      <span class="section-rule"></span>
+    </div>
+    <p>Sometimes you still want a single accuracy-like number — for a report, a dashboard, a quick health check — but you don't want it distorted by class imbalance the way plain accuracy is. <strong>Balanced accuracy</strong> fixes that by giving every class equal say, regardless of how many samples it has:</p>
+
+    <div class="formula-block">
+      <span class="name">Balanced Accuracy</span> = (Recall<sub>class 1</sub> + Recall<sub>class 2</sub>) / 2
+      <div class="sub">Each class contributes equally — a large class can no longer dominate the score.</div>
+    </div>
+
+    <p>Revisit the lazy "always predict positive" model from the start of this piece: recall on the positive class is 100%, recall on the negative class is 0%.</p>
+    <div class="stat-pair">
+      <div class="stat-card good"><div class="num">90%</div><div class="lbl">Plain accuracy</div></div>
+      <div class="stat-card bad"><div class="num">50%</div><div class="lbl">Balanced accuracy</div></div>
+    </div>
+    <p>Balanced accuracy immediately reveals what plain accuracy hid: this model is exactly as good as a coin flip once you stop letting the majority class carry it. That's why it's the default sanity check in domains like <strong>anomaly and defect detection</strong>, where the thing you actually care about is almost always the rare class.</p>
+
+    <hr class="rule">
+
+    <div class="section-header">
+      <span class="section-number">—</span>
+      <span class="section-title">Field guide</span>
+      <span class="section-rule"></span>
+    </div>
+    <table>
+      <tr><th>Metric</th><th>Threshold?</th><th>Best for</th></tr>
+      <tr><td class="metric-name">Accuracy</td><td>Yes</td><td>Roughly balanced classes only.</td></tr>
+      <tr><td class="metric-name">Balanced Acc.</td><td>Yes</td><td>Imbalanced classes, still want one simple number.</td></tr>
+      <tr><td class="metric-name">Precision</td><td>Yes</td><td>False alarms are costly (e.g. flagging fraud that isn't fraud).</td></tr>
+      <tr><td class="metric-name">Recall</td><td>Yes</td><td>Missed positives are costly (e.g. missing a defect, a tumor).</td></tr>
+      <tr><td class="metric-name">F1</td><td>Yes</td><td>You need one number that respects both, at your chosen threshold.</td></tr>
+      <tr><td class="metric-name">AUROC</td><td>No</td><td>Comparing models, or judging raw separability before a threshold exists.</td></tr>
+    </table>
+
+    <p>None of these metrics is "the best" one in isolation — they answer different questions. Accuracy asks <em>how often am I right, overall?</em> Precision and recall ask <em>which kind of mistake am I making?</em> F1 asks <em>can I balance those mistakes at one setting?</em> And AUROC asks the radar operator's original question: <em>if I had to sweep the dial from paranoid to careless, how well does this system tell signal from noise the whole way through?</em></p>
+
+  </article>
+</div>
+
+<footer>
+  <div class="footer-inner">
+    <div class="footer-left">Let's <span>connect</span>.</div>
+    <div class="footer-links">
+      <a href="mailto:vanmaliaakash5@gmail.com">Email</a>
+      <a href="https://github.com/aakashvanmali45" target="_blank">GitHub</a>
+      <a href="https://linkedin.com/in/aakashvanmali" target="_blank">LinkedIn</a>
+    </div>
+  </div>
+  <div class="footer-note">© 2026 Aakash Vanmali · Notes on model evaluation, written up from a working notebook</div>
+</footer>
+
+<script>
+(function(){
+  function mulberry32(a){
+    return function(){
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      let t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  const rng = mulberry32(20260819);
+  function gaussian(mean, sd){
+    let u = 1 - rng(), v = rng();
+    let z = Math.sqrt(-2 * Math.log(u)) * Math.cos(2*Math.PI*v);
+    return mean + z*sd;
+  }
+  function clamp01(x){ return Math.max(0, Math.min(1, x)); }
+
+  const N = 60;
+  const positives = [];
+  const negatives = [];
+  for(let i=0;i<N;i++){
+    positives.push(clamp01(gaussian(0.66, 0.15)));
+    negatives.push(clamp01(gaussian(0.34, 0.15)));
+  }
+
+  const thresholds = [];
+  for(let t=1; t>=-0.001; t-=0.01) thresholds.push(Math.round(t*100)/100);
+  const rocPoints = thresholds.map(t=>{
+    let tp=0, fn=0, fp=0, tn=0;
+    positives.forEach(s => s>=t ? tp++ : fn++);
+    negatives.forEach(s => s>=t ? fp++ : tn++);
+    return { t, tpr: tp/(tp+fn), fpr: fp/(fp+tn) };
+  });
+  let auroc = 0;
+  for(let i=1;i<rocPoints.length;i++){
+    const a = rocPoints[i-1], b = rocPoints[i];
+    auroc += Math.abs(b.fpr - a.fpr) * (a.tpr + b.tpr) / 2;
+  }
+  document.getElementById('aurocVal').textContent = auroc.toFixed(3);
+
+  const histCanvas = document.getElementById('histCanvas');
+  const hctx = histCanvas.getContext('2d');
+  const HW = histCanvas.width, HH = histCanvas.height;
+  const bins = 24;
+  function binData(arr){
+    const counts = new Array(bins).fill(0);
+    arr.forEach(v=>{
+      let idx = Math.min(bins-1, Math.floor(v*bins));
+      counts[idx]++;
+    });
+    return counts;
+  }
+  const posBins = binData(positives);
+  const negBins = binData(negatives);
+  const maxCount = Math.max(...posBins, ...negBins);
+
+  function drawHist(threshold){
+    hctx.clearRect(0,0,HW,HH);
+    const padL=34, padB=22, padT=10, padR=10;
+    const plotW = HW-padL-padR, plotH = HH-padT-padB;
+    const bw = plotW/bins;
+    hctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    hctx.lineWidth = 1;
+    hctx.beginPath();
+    hctx.moveTo(padL, padT); hctx.lineTo(padL, HH-padB); hctx.lineTo(HW-padR, HH-padB);
+    hctx.stroke();
+    for(let i=0;i<bins;i++){
+      const x = padL + i*bw;
+      const ph = (negBins[i]/maxCount)*plotH;
+      hctx.fillStyle = 'rgba(107,141,173,0.6)';
+      hctx.fillRect(x+1, HH-padB-ph, bw-2, ph);
+      const ph2 = (posBins[i]/maxCount)*plotH;
+      hctx.fillStyle = 'rgba(91,166,138,0.6)';
+      hctx.fillRect(x+1, HH-padB-ph2, bw-2, ph2);
+    }
+    const tx = padL + threshold*plotW;
+    hctx.strokeStyle = '#C9A84C';
+    hctx.lineWidth = 2;
+    hctx.setLineDash([5,4]);
+    hctx.beginPath();
+    hctx.moveTo(tx, padT); hctx.lineTo(tx, HH-padB);
+    hctx.stroke();
+    hctx.setLineDash([]);
+    hctx.fillStyle = 'rgba(200,200,212,0.5)';
+    hctx.font = '10px JetBrains Mono';
+    hctx.fillText('0.0', padL-4, HH-6);
+    hctx.fillText('1.0', HW-padR-16, HH-6);
+    hctx.fillText('score →', HW/2-20, HH-6);
+  }
+
+  const rocCanvas = document.getElementById('rocCanvas');
+  const rctx = rocCanvas.getContext('2d');
+  const RW = rocCanvas.width, RH = rocCanvas.height;
+  const rPadL=40, rPadB=28, rPadT=14, rPadR=14;
+  const rPlotW = RW-rPadL-rPadR, rPlotH = RH-rPadT-rPadB;
+  function toX(fpr){ return rPadL + fpr*rPlotW; }
+  function toY(tpr){ return RH-rPadB - tpr*rPlotH; }
+
+  function drawROC(currentFpr, currentTpr){
+    rctx.clearRect(0,0,RW,RH);
+    rctx.strokeStyle = 'rgba(255,255,255,0.12)'; rctx.lineWidth=1;
+    rctx.beginPath();
+    rctx.moveTo(rPadL, rPadT); rctx.lineTo(rPadL, RH-rPadB); rctx.lineTo(RW-rPadR, RH-rPadB);
+    rctx.stroke();
+    rctx.strokeStyle = 'rgba(200,200,212,0.35)'; rctx.setLineDash([4,4]); rctx.lineWidth=1.2;
+    rctx.beginPath(); rctx.moveTo(toX(0), toY(0)); rctx.lineTo(toX(1), toY(1)); rctx.stroke();
+    rctx.setLineDash([]);
+    rctx.beginPath();
+    rctx.moveTo(toX(0), toY(0));
+    rocPoints.forEach(p => rctx.lineTo(toX(p.fpr), toY(p.tpr)));
+    rctx.lineTo(toX(1), toY(0));
+    rctx.closePath();
+    rctx.fillStyle = 'rgba(107,141,173,0.12)';
+    rctx.fill();
+    rctx.beginPath();
+    rocPoints.forEach((p,i)=>{
+      if(i===0) rctx.moveTo(toX(p.fpr), toY(p.tpr));
+      else rctx.lineTo(toX(p.fpr), toY(p.tpr));
+    });
+    rctx.strokeStyle = '#6B8DAD'; rctx.lineWidth=2.2; rctx.stroke();
+    rctx.beginPath();
+    rctx.arc(toX(currentFpr), toY(currentTpr), 5.5, 0, Math.PI*2);
+    rctx.fillStyle = '#C9A84C';
+    rctx.fill();
+    rctx.strokeStyle = '#0B1222'; rctx.lineWidth=1.5; rctx.stroke();
+    rctx.fillStyle = 'rgba(200,200,212,0.5)'; rctx.font = '10px JetBrains Mono';
+    rctx.fillText('FPR →', RW/2-14, RH-6);
+    rctx.save();
+    rctx.translate(12, RH/2+16);
+    rctx.rotate(-Math.PI/2);
+    rctx.fillText('TPR →', 0,0);
+    rctx.restore();
+  }
+
+  const slider = document.getElementById('threshSlider');
+  const threshLabel = document.getElementById('threshLabel');
+  const tpVal = document.getElementById('tpVal'), fpVal = document.getElementById('fpVal');
+  const fnVal = document.getElementById('fnVal'), tnVal = document.getElementById('tnVal');
+  const accVal = document.getElementById('accVal'), precVal = document.getElementById('precVal');
+  const recVal = document.getElementById('recVal'), f1Val = document.getElementById('f1Val');
+  const fprVal = document.getElementById('fprVal'), balAccVal = document.getElementById('balAccVal');
+
+  function update(){
+    const t = parseFloat(slider.value);
+    threshLabel.textContent = t.toFixed(2);
+
+    let tp=0, fn=0, fp=0, tn=0;
+    positives.forEach(s => s>=t ? tp++ : fn++);
+    negatives.forEach(s => s>=t ? fp++ : tn++);
+
+    tpVal.textContent = tp; fnVal.textContent = fn;
+    fpVal.textContent = fp; tnVal.textContent = tn;
+
+    const acc = (tp+tn)/(tp+tn+fp+fn);
+    const prec = tp+fp>0 ? tp/(tp+fp) : 0;
+    const rec = tp+fn>0 ? tp/(tp+fn) : 0;
+    const f1 = (prec+rec)>0 ? 2*prec*rec/(prec+rec) : 0;
+    const fpr = fp+tn>0 ? fp/(fp+tn) : 0;
+    const recNeg = tn+fp>0 ? tn/(tn+fp) : 0;
+    const balAcc = (rec+recNeg)/2;
+
+    accVal.textContent = (acc*100).toFixed(1)+'%';
+    precVal.textContent = (prec*100).toFixed(1)+'%';
+    recVal.textContent = (rec*100).toFixed(1)+'%';
+    f1Val.textContent = f1.toFixed(3);
+    fprVal.textContent = (fpr*100).toFixed(1)+'%';
+    balAccVal.textContent = (balAcc*100).toFixed(1)+'%';
+
+    drawHist(t);
+    drawROC(fpr, rec);
+  }
+
+  slider.addEventListener('input', update);
+  update();
+})();
+</script>
+
+</body>
+</html>
