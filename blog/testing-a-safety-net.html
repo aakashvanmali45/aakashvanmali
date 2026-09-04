@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Building a Safety Net — A Field Notebook on Testing · Aakash Vanmali</title>
+<meta name="description" content="Why every working app quietly rots without tests, and how to build a three-layer suite — pure functions, HTTP endpoints, a real browser — for a small todo app I use every day. Part 1 of 2.">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root{
+    --ink:#0B1222; --ink-light:#111B2E; --ink-surface:#162038;
+    --gold:#C9A84C; --gold-dim:rgba(201,168,76,0.15); --gold-glow:rgba(201,168,76,0.08);
+    --paper:#F6F2E8; --paper-white:#FDFBF5;
+    --text-dark:#1A1A1A; --text-mid:#4A4A4A; --text-light:#777;
+    --text-on-ink:#C8C8D4; --text-bright:#E8E8F0;
+    --border-paper:#E0D8C8; --border-ink:rgba(255,255,255,0.08);
+    --serif:'Cormorant Garamond', Georgia, serif;
+    --sans:'Space Grotesk', -apple-system, sans-serif;
+    --mono:'JetBrains Mono', monospace;
+    --max-w:780px;
+    --ease: cubic-bezier(0.25,0.46,0.45,0.94);
+    --teal:#5BA68A;
+    --steel:#6B8DAD;
+    --amber:#D4956B;
+    --lavender:#8B7DB8;
+  }
+  html{ font-size:17px; scroll-behavior:smooth; }
+  body{ font-family:var(--sans); color:var(--text-dark); background:var(--paper); line-height:1.7; -webkit-font-smoothing:antialiased; }
+  ::selection{ background:var(--gold); color:var(--ink); }
+  a{ color:var(--gold); text-decoration:none; transition:color .2s; }
+  a:hover{ text-decoration:underline; }
+
+  /* ===== TOPBAR ===== */
+  .topbar{ background:var(--ink); padding:1.1rem 0; }
+  .topbar-inner{ max-width:var(--max-w); margin:0 auto; padding:0 2rem; display:flex; justify-content:space-between; align-items:center; }
+  .topbar-name{ font-family:var(--serif); font-weight:600; font-size:1.15rem; color:var(--text-on-ink); }
+  .topbar-name span{ color:var(--gold); }
+  .topbar-links{ display:flex; gap:1.4rem; }
+  .topbar-links a{ font-family:var(--mono); font-size:0.72rem; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-on-ink); opacity:0.75; }
+  .topbar-links a:hover{ color:var(--gold); opacity:1; text-decoration:none; }
+
+  /* ===== HERO ===== */
+  .hero{ background:var(--ink); padding: 4.5rem 0 4rem; position:relative; overflow:hidden; }
+  .hero::after{
+    content:''; position:absolute; top:-20%; right:-10%; width:480px; height:480px; border-radius:50%;
+    background:radial-gradient(circle, rgba(201,168,76,0.10), transparent 70%);
+  }
+  .hero-inner{ max-width:var(--max-w); margin:0 auto; padding:0 2rem; position:relative; }
+  .hero-eyebrow{ font-family:var(--mono); font-size:0.7rem; letter-spacing:0.2em; text-transform:uppercase; color:var(--gold); margin-bottom:1.2rem; }
+  .hero h1{ font-family:var(--serif); font-weight:600; font-size:3rem; color:var(--text-bright); line-height:1.1; letter-spacing:-0.01em; margin-bottom:1rem; max-width:640px; }
+  .hero-dek{ font-family:var(--serif); font-style:italic; font-size:1.25rem; color:rgba(201,168,76,0.85); max-width:560px; line-height:1.5; }
+  .hero-meta{ font-family:var(--mono); font-size:0.68rem; letter-spacing:0.08em; text-transform:uppercase; color:rgba(200,200,212,0.4); margin-top:2rem; }
+
+  /* ===== CONTENT ===== */
+  .content{ max-width:var(--max-w); margin:0 auto; padding:0 2rem; }
+  article{ padding:3.5rem 0 1rem; }
+  .section-header{ display:flex; align-items:center; gap:1rem; margin: 3.4rem 0 1.6rem; }
+  .section-header:first-of-type{ margin-top:0; }
+  .section-number{ font-family:var(--serif); font-size:2rem; font-weight:300; color:var(--gold); line-height:1; opacity:0.6; }
+  .section-title{ font-family:var(--serif); font-size:1.5rem; font-weight:600; color:var(--text-dark); letter-spacing:-0.01em; }
+  .section-rule{ flex:1; height:1px; background:var(--border-paper); }
+
+  p{ margin:0 0 1.15rem; font-size:0.98rem; color:var(--text-mid); }
+  p.lead{ font-family:var(--serif); font-size:1.35rem; font-style:italic; color:var(--text-dark); line-height:1.6; }
+  strong{ color:var(--text-dark); font-weight:600; }
+  em{ color:var(--text-dark); }
+  code{ font-family:var(--mono); background:var(--paper-white); border:1px solid var(--border-paper); padding:1px 6px; font-size:0.85em; color:var(--gold); border-radius:2px; }
+
+  .formula-block{
+    font-family:var(--mono); background:var(--paper-white); border:1px solid var(--border-paper); border-left:3px solid var(--gold);
+    padding:1rem 1.3rem; margin:1.3rem 0; font-size:0.92rem; color:var(--text-dark); overflow-x:auto;
+  }
+  .formula-block .name{ font-family:var(--sans); font-weight:600; color:var(--gold); font-size:0.78rem; letter-spacing:0.04em; text-transform:uppercase; display:block; margin-bottom:0.3rem;}
+  .formula-block .sub{ font-family:var(--sans); color:var(--text-light); font-size:0.8rem; margin-top:0.5rem; }
+
+  blockquote{ margin:1.8rem 0; padding:0.2rem 0 0.2rem 1.3rem; border-left:2px solid var(--gold); font-family:var(--serif); font-style:italic; color:var(--text-mid); font-size:1.15rem; }
+
+  hr.rule{ border:none; border-top:1px solid var(--border-paper); margin:3rem 0; }
+
+  .callout{ background:var(--paper-white); border:1px solid var(--border-paper); border-left:3px solid var(--steel); padding:1rem 1.3rem; margin:1.5rem 0; font-size:0.92rem; color:var(--text-mid); }
+  .callout strong{ color:var(--steel); }
+
+  .callout.gold{ border-left-color:var(--gold); }
+  .callout.gold strong{ color:var(--gold); }
+
+  .stat-pair{ display:flex; gap:1rem; margin:1.4rem 0; flex-wrap:wrap; }
+  .stat-card{ flex:1; min-width:150px; background:var(--paper-white); border:1px solid var(--border-paper); padding:1rem 1.2rem; }
+  .stat-card .num{ font-family:var(--serif); font-size:2rem; font-weight:700; }
+  .stat-card .lbl{ font-family:var(--mono); font-size:0.65rem; color:var(--text-light); text-transform:uppercase; letter-spacing:0.05em; margin-top:0.2rem;}
+  .stat-card.teal .num{ color:var(--teal); }
+  .stat-card.steel .num{ color:var(--steel); }
+  .stat-card.gold .num{ color:var(--gold); }
+
+  /* ===== TABLE ===== */
+  table{ width:100%; border-collapse:collapse; margin:1.4rem 0; font-size:0.9rem; }
+  th,td{ text-align:left; padding:0.65rem 0.6rem; border-bottom:1px solid var(--border-paper); vertical-align:top; }
+  th{ font-family:var(--mono); font-size:0.62rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-light); font-weight:500;}
+  td{ color:var(--text-mid); }
+  td.metric-name{ color:var(--text-dark); font-weight:600; font-family:var(--sans); }
+  tr:last-child td{ border-bottom:none; }
+
+  /* ===== CODE BLOCK ===== */
+  .codeblk{
+    font-family:var(--mono); background:var(--paper-white); border:1px solid var(--border-paper); border-left:3px solid var(--steel);
+    padding:1rem 1.3rem; margin:1.3rem 0; font-size:0.82rem; color:var(--text-dark); overflow-x:auto; line-height:1.75; white-space:pre;
+  }
+  .codeblk .c{ color:var(--text-light); font-style:italic; }
+  .codeblk .k{ color:var(--steel); }
+  .codeblk .s{ color:var(--teal); }
+  .codeblk .n{ color:var(--amber); }
+  .codeblk .d{ color:var(--gold); }
+
+  /* ===== INTERACTIVE 1 — TEST PYRAMID ===== */
+  .pyramid-wrap{
+    background:var(--ink); padding:1.8rem 1.6rem 2rem; margin:2rem 0 1rem; position:relative; overflow:hidden;
+  }
+  .pyramid-wrap::before{ content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--gold); }
+  .pyramid-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:1.2rem; flex-wrap:wrap; gap:0.6rem; }
+  .pyramid-title{ font-family:var(--mono); font-size:0.72rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--gold); display:flex; align-items:center; gap:0.5rem; }
+  .pyramid-title .dot{ width:6px; height:6px; border-radius:50%; background:var(--gold); animation:blink 2s infinite; }
+  .pyramid-sub{ font-family:var(--mono); font-size:0.64rem; color:rgba(200,200,212,0.45); }
+  @keyframes blink{ 50%{ opacity:0.3; } }
+
+  .pyramid-grid{ display:grid; grid-template-columns:1fr 1fr; gap:1.3rem; }
+  @media (max-width:720px){ .pyramid-grid{ grid-template-columns:1fr; } }
+
+  .pyramid-svg-wrap{ background:rgba(255,255,255,0.03); border:1px solid var(--border-ink); padding:1rem; display:flex; align-items:center; justify-content:center; }
+  .pyramid-svg{ width:100%; max-width:340px; height:auto; cursor:pointer; }
+  .pyramid-layer{ transition: all 0.25s ease; cursor:pointer; }
+  .pyramid-layer:hover{ transform:translateX(-1px); }
+  .pyramid-label{ font-family:var(--mono); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; fill:var(--text-bright); pointer-events:none; text-anchor:middle; }
+  .pyramid-count{ font-family:var(--serif); font-size:15px; font-weight:600; fill:var(--gold); pointer-events:none; text-anchor:middle; }
+
+  .pyramid-panel{ background:rgba(255,255,255,0.03); border:1px solid var(--border-ink); padding:1.1rem 1.2rem; }
+  .pp-eyebrow{ font-family:var(--mono); font-size:0.6rem; text-transform:uppercase; letter-spacing:0.08em; color:rgba(200,200,212,0.55); margin-bottom:0.4rem; display:flex; align-items:center; gap:0.4rem;}
+  .pp-eyebrow .sw{ width:8px; height:8px; border-radius:1px; display:inline-block; }
+  .pp-title{ font-family:var(--serif); font-size:1.4rem; font-weight:600; color:var(--text-bright); margin-bottom:0.4rem; }
+  .pp-tag{ font-family:var(--sans); font-size:0.82rem; color:rgba(200,200,212,0.65); font-style:italic; margin-bottom:1rem; line-height:1.5;}
+  .pp-row{ display:grid; grid-template-columns:auto 1fr; gap:0.8rem; padding:0.55rem 0; border-top:1px solid var(--border-ink); font-size:0.78rem;}
+  .pp-row:first-of-type{ border-top:none; padding-top:0.2rem; }
+  .pp-k{ font-family:var(--mono); font-size:0.62rem; color:rgba(200,200,212,0.5); text-transform:uppercase; letter-spacing:0.06em; padding-top:2px;}
+  .pp-v{ color:rgba(200,200,212,0.85); line-height:1.55;}
+
+  /* ===== INTERACTIVE 2 — AAA CODE ===== */
+  .aaa-wrap{
+    background:var(--ink); padding:1.6rem 1.5rem 1.8rem; margin:2rem 0 1rem; position:relative; overflow:hidden;
+  }
+  .aaa-wrap::before{ content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--gold); }
+  .aaa-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:1.1rem; flex-wrap:wrap; gap:0.6rem;}
+  .aaa-title{ font-family:var(--mono); font-size:0.72rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--gold); display:flex; align-items:center; gap:0.5rem;}
+  .aaa-title .dot{ width:6px; height:6px; border-radius:50%; background:var(--gold); animation:blink 2s infinite;}
+  .aaa-sub{ font-family:var(--mono); font-size:0.64rem; color:rgba(200,200,212,0.45);}
+
+  .aaa-line{
+    display:grid; grid-template-columns:78px 1fr; gap:0.9rem; align-items:center;
+    padding:0.55rem 0.6rem; margin:0.2rem 0; border-left:3px solid transparent; border-radius:2px;
+    cursor:pointer; transition:all 0.2s ease;
+  }
+  .aaa-line:hover{ background:rgba(255,255,255,0.04); }
+  .aaa-line.active{ background:rgba(255,255,255,0.06); }
+  .aaa-line[data-part="arrange"].active{ border-left-color:var(--teal); }
+  .aaa-line[data-part="act"].active{ border-left-color:var(--amber); }
+  .aaa-line[data-part="assert"].active{ border-left-color:var(--lavender); }
+
+  .aaa-chip{
+    font-family:var(--mono); font-size:0.58rem; letter-spacing:0.1em; text-transform:uppercase;
+    padding:0.28rem 0.5rem; border-radius:2px; text-align:center; font-weight:600;
+    color:var(--ink);
+  }
+  .aaa-chip.arrange{ background:var(--teal); }
+  .aaa-chip.act{ background:var(--amber); }
+  .aaa-chip.assert{ background:var(--lavender); color:#fff;}
+
+  .aaa-code{
+    font-family:var(--mono); font-size:0.82rem; color:var(--text-bright); line-height:1.55; overflow-x:auto; white-space:pre;
+  }
+  .aaa-code .c{ color:rgba(200,200,212,0.4); font-style:italic;}
+  .aaa-code .k{ color:var(--steel);}
+  .aaa-code .s{ color:var(--teal);}
+  .aaa-code .n{ color:var(--amber);}
+  .aaa-code .f{ color:var(--gold);}
+
+  .aaa-caption{
+    margin-top:1rem; padding:0.8rem 1rem; background:rgba(255,255,255,0.04); border:1px solid var(--border-ink);
+    font-family:var(--sans); font-size:0.82rem; color:rgba(200,200,212,0.75); line-height:1.55; min-height:2.6rem;
+    border-left:3px solid rgba(255,255,255,0.15); transition: border-color 0.25s ease;
+  }
+  .aaa-caption.arrange{ border-left-color:var(--teal); }
+  .aaa-caption.act{ border-left-color:var(--amber); }
+  .aaa-caption.assert{ border-left-color:var(--lavender); }
+  .aaa-caption strong{ color:var(--text-bright); font-weight:600;}
+
+  .aaa-hint{ font-family:var(--mono); font-size:0.62rem; color:rgba(200,200,212,0.45); text-align:center; margin-top:0.8rem;}
+
+  /* ===== FOOTER ===== */
+  footer{ background:var(--ink); color:var(--text-on-ink); margin-top:3rem; }
+  .footer-inner{ max-width:var(--max-w); margin:0 auto; padding:2.6rem 2rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; }
+  .footer-left{ font-family:var(--serif); font-size:1.1rem; }
+  .footer-left span{ color:var(--gold); }
+  .footer-links{ display:flex; gap:1.3rem; }
+  .footer-links a{ font-size:0.8rem; color:var(--text-on-ink); opacity:0.6; }
+  .footer-links a:hover{ opacity:1; color:var(--gold); text-decoration:none; }
+  .footer-note{ max-width:var(--max-w); margin:0 auto; padding:0 2rem 1.6rem; font-family:var(--mono); font-size:0.62rem; color:rgba(200,200,212,0.3); }
+
+  @media (max-width:640px){
+    .hero h1{ font-size:2.1rem; }
+    .hero-dek{ font-size:1.05rem; }
+    .content{ padding:0 1.2rem; }
+    .topbar-inner{ padding:0 1.2rem; }
+    .hero-inner{ padding:0 1.2rem; }
+    .aaa-line{ grid-template-columns:70px 1fr; gap:0.6rem; }
+    .aaa-code{ font-size:0.72rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="topbar-name">Aakash <span>Vanmali</span></div>
+    <div class="topbar-links">
+      <a href="index.html">Writing</a>
+      <a href="../index.html">Portfolio</a>
+    </div>
+  </div>
+</div>
+
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-eyebrow">Notebook · Software Testing · Part 1 of 2</div>
+    <h1>Building a Safety Net</h1>
+    <p class="hero-dek">Why every working app quietly rots without tests, and how to build a three-layer suite — from pure functions up to a real browser — for a small todo app I use every day.</p>
+    <div class="hero-meta">Pytest · Playwright · Unit · API · E2E · Page Object Model · Fixtures</div>
+  </div>
+</div>
+
+<div class="content">
+  <article>
+
+    <p class="lead">I built a small todo app for myself and used it for a week. It worked. Then I started thinking about adding a feature — and I realised I had no way to know, without opening my browser and clicking through every screen, that the thing I'd change wouldn't break something I already relied on. That question — how do you keep an app trustworthy as it grows — has an answer with fifty years of engineering behind it. You write tests.</p>
+
+    <p>This is a field notebook from the first pass at doing that properly. Not a certification, not a textbook, not a war story from production. Just a small app, a laptop, and a suite that grew from nothing to twenty-two tests across three layers. Read it as study notes: the reasoning matters more than any single line of code.</p>
+
+    <div class="section-header">
+      <span class="section-number">01</span>
+      <span class="section-title">The app, and the question I couldn't answer</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p><a href="https://github.com/aakashvanmali45/todo-companion" target="_blank"><strong>todo-companion</strong></a> is a local, self-hosted todo and daily-planning app. Type a task and Google's Gemini breaks it into subtasks with time estimates. A quick energy check produces a plan for the morning, afternoon and evening. At day's end, three short prompts capture what you actually got done. It's a FastAPI backend, a vanilla-JavaScript single-page frontend, and a SQLite file — nothing exotic.</p>
+
+    <p>Every developer who has built something small enough to actually use has felt the same thing: <em>this works, today</em>. And the moment you go to change one line, you realise you don't know what else in the app depends on that line. So you open the browser and click. You add a task. You mark it done. You delete it. You reload. You open the recurring-task flow. You cross your fingers and ship. That flow is called <strong>manual regression testing</strong>, and its cost per change grows every time you add a feature. Eventually it costs more than the change itself, and you either stop shipping or start shipping bugs.</p>
+
+    <div class="section-header">
+      <span class="section-number">02</span>
+      <span class="section-title">Why tests earn their keep</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>A good test suite pays three dividends, and any one of them justifies the effort:</p>
+
+    <div class="callout gold"><strong>1. Trust.</strong> When you change something, you learn in seconds — not in production — whether you broke a promise the app was already making to its users.</div>
+    <div class="callout"><strong>2. A change alarm.</strong> Bugs caught before merge cost minutes to fix. The same bug caught by a user six weeks later costs hours, plus reputation. The suite is an early-warning system priced in your time.</div>
+    <div class="callout"><strong>3. A living spec.</strong> A well-named test is a sentence about what the app is supposed to do. Read together, they describe the app's intent better than any document you'll write and forget to update.</div>
+
+    <p>None of this is new. What's new for me — and probably for anyone learning testing seriously for the first time — is that these dividends only materialise if the suite is <em>structured</em>. A pile of tests written in the wrong shape gives you almost none of the three, and worse, gives you false confidence. So before writing a single test, you decide on a shape.</p>
+
+    <div class="section-header">
+      <span class="section-number">03</span>
+      <span class="section-title">The shape: the test pyramid</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>The test pyramid is the most-referenced mental model in all of QA. Tests come in layers, each layer trading off speed against realism. The good shape has many tests at the bottom (fast, focused, cheap) and fewer at the top (slow, holistic, expensive). Tap or hover a layer below to see what each one is for.</p>
+
+    <div class="pyramid-wrap">
+      <div class="pyramid-head">
+        <div class="pyramid-title"><span class="dot"></span> Test pyramid — interactive</div>
+        <div class="pyramid-sub">tap a layer to explore</div>
+      </div>
+
+      <div class="pyramid-grid">
+        <div class="pyramid-svg-wrap">
+          <svg class="pyramid-svg" viewBox="0 0 340 280" xmlns="http://www.w3.org/2000/svg" aria-label="Interactive test pyramid">
+            <!-- E2E (top, narrow) -->
+            <g class="pyramid-layer" data-layer="e2e">
+              <polygon points="130,30 210,30 240,95 100,95" fill="#C9A84C" fill-opacity="0.28" stroke="#C9A84C" stroke-opacity="0.55" stroke-width="1.2"/>
+              <text class="pyramid-label" x="170" y="60">E2E</text>
+              <text class="pyramid-count" x="170" y="82">8</text>
+            </g>
+            <!-- API (middle) -->
+            <g class="pyramid-layer" data-layer="api">
+              <polygon points="100,95 240,95 270,175 70,175" fill="#6B8DAD" fill-opacity="0.28" stroke="#6B8DAD" stroke-opacity="0.55" stroke-width="1.2"/>
+              <text class="pyramid-label" x="170" y="130">API</text>
+              <text class="pyramid-count" x="170" y="152">6</text>
+            </g>
+            <!-- Unit (bottom, wide) -->
+            <g class="pyramid-layer" data-layer="unit">
+              <polygon points="70,175 270,175 310,260 30,260" fill="#5BA68A" fill-opacity="0.28" stroke="#5BA68A" stroke-opacity="0.55" stroke-width="1.2"/>
+              <text class="pyramid-label" x="170" y="215">Unit</text>
+              <text class="pyramid-count" x="170" y="237">6</text>
+            </g>
+          </svg>
+        </div>
+
+        <div class="pyramid-panel" id="pyramidPanel">
+          <div class="pp-eyebrow"><span class="sw" style="background:var(--teal);"></span> select a layer</div>
+          <div class="pp-title" id="ppTitle">Three layers, one philosophy</div>
+          <p class="pp-tag" id="ppTag">Each layer catches a different class of bug. Together, they overlap enough to keep you safe.</p>
+          <div class="pp-row"><div class="pp-k">what it tests</div><div class="pp-v" id="ppWhat">Small, focused pieces at the bottom. Whole user journeys at the top.</div></div>
+          <div class="pp-row"><div class="pp-k">typical speed</div><div class="pp-v" id="ppSpeed">Milliseconds at the base. Seconds at the peak.</div></div>
+          <div class="pp-row"><div class="pp-k">catches</div><div class="pp-v" id="ppCatch">Logic bugs, contract breakage, and full-stack wiring errors respectively.</div></div>
+          <div class="pp-row"><div class="pp-k">tradeoff</div><div class="pp-v" id="ppTrade">Speed vs. realism. The higher you go, the closer to reality — and the slower to run.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <p>The pyramid is a shape, not a rule. But the intuition is real: <strong>if the shape inverts</strong> — a few unit tests at the base, hundreds of end-to-end tests at the top — your suite becomes slow, flaky, and eventually stops running. So the discipline is to push every test as far down the pyramid as it can honestly go. Test the pure function in isolation first; test the HTTP endpoint next; only test the whole browser flow when nothing below could give you the same confidence.</p>
+
+    <div class="section-header">
+      <span class="section-number">04</span>
+      <span class="section-title">Scaffolding: setting the rules before the first test</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>Before the first assertion, the framework itself needs configuring. Skipping this step is the number-one reason personal test suites rot within a month — someone runs the tests slightly differently, gets a different result, blames the code, and stops trusting the suite. The fix is a single file at the root of the project called <code>pyproject.toml</code>, which is Python's agreed-upon place for tool configuration.</p>
+
+    <div class="codeblk"><span class="c"># pyproject.toml</span>
+<span class="k">[tool.pytest.ini_options]</span>
+minversion   = <span class="s">"8.0"</span>
+testpaths    = [<span class="s">"tests"</span>]
+addopts      = [<span class="s">"-ra"</span>, <span class="s">"--strict-markers"</span>, <span class="s">"--strict-config"</span>, <span class="s">"-v"</span>]
+markers = [
+  <span class="s">"unit: fast, pure Python, no I/O"</span>,
+  <span class="s">"api:  FastAPI TestClient, uses test DB"</span>,
+  <span class="s">"e2e:  Playwright, requires running server"</span>,
+]</div>
+
+    <p><strong>Markers</strong> are labels you stick on tests so you can run subsets on demand. A test tagged <code>@pytest.mark.unit</code> runs when you type <code>pytest -m unit</code>; add <code>-m "not e2e"</code> and every slow browser test is skipped. This is what makes tiered CI possible — unit tests on every save, everything on every merge, the slowest tests overnight — and it's a real interview signal to be able to show a suite designed around it.</p>
+
+    <p><strong>addopts</strong> are default flags pytest applies automatically. Each of the four above earns its place. <code>-ra</code> summarises everything the run <em>didn't</em> pass, so silently-skipped tests can't hide. <code>--strict-markers</code> turns a typo like <code>@pytest.mark.uint</code> into an error instead of a silently-ignored decoration. <code>--strict-config</code> does the same for typos in the config file itself. <code>-v</code> prints each test name as it runs, so a hang tells you exactly which test hung. All four share one philosophy:</p>
+
+    <blockquote>Fail loudly, fail early. A test framework that quietly ignores your mistakes is worse than useless — it gives you confidence that isn't earned.</blockquote>
+
+    <p>This philosophy has a concrete payoff. Early in the setup I mistyped <code>miniversion</code> instead of <code>minversion</code>. With <code>--strict-config</code> in place, pytest refused to run and named the exact typo. Fix cost: 30 seconds. Without it, pytest would have silently used the default and the config would have been quietly lying to me for months. The tripwire cost nothing and paid immediately.</p>
+
+    <div class="section-header">
+      <span class="section-number">05</span>
+      <span class="section-title">Layer 1 — Unit tests: the foundation</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>A <strong>unit test</strong> exercises one function, in isolation, with no database, no network, no browser. It runs in milliseconds. If it fails, the failure names exactly what broke. This is the fastest, cheapest, most focused kind of test — and where the majority of a healthy suite lives.</p>
+
+    <p>The best first target in any codebase is a <strong>pure function</strong>: one that takes inputs, returns an output, and touches nothing else. In todo-companion, that function is <code>_advance_due</code>. When you check off a recurring task, the app calls it to compute the task's next due date. It's pure date arithmetic — three lines of logic and a library call — and it silently powers every recurring habit in the app.</p>
+
+    <p>Every unit test in the world, no matter the language, follows the same three-part shape: <strong>Arrange, Act, Assert</strong>. Once you see it, you cannot un-see it. Tap a section below.</p>
+
+    <div class="aaa-wrap">
+      <div class="aaa-head">
+        <div class="aaa-title"><span class="dot"></span> The AAA pattern — interactive</div>
+        <div class="aaa-sub">tap a section to see what it does</div>
+      </div>
+
+      <div class="aaa-line" data-part="arrange">
+        <span class="aaa-chip arrange">Arrange</span>
+<pre class="aaa-code"><span class="n">current_due</span> = <span class="f">date</span>(<span class="n">2026</span>, <span class="n">9</span>, <span class="n">4</span>)   <span class="c"># a Friday</span></pre>
+      </div>
+
+      <div class="aaa-line" data-part="act">
+        <span class="aaa-chip act">Act</span>
+<pre class="aaa-code"><span class="n">result</span> = <span class="f">_advance_due</span>(base=<span class="n">current_due</span>, rule=<span class="s">"daily"</span>, interval=<span class="n">1</span>)</pre>
+      </div>
+
+      <div class="aaa-line" data-part="assert">
+        <span class="aaa-chip assert">Assert</span>
+<pre class="aaa-code"><span class="k">assert</span> <span class="n">result</span> == <span class="f">date</span>(<span class="n">2026</span>, <span class="n">9</span>, <span class="n">5</span>)</pre>
+      </div>
+
+      <div class="aaa-caption" id="aaaCaption">Hover or tap a section to see what it does and why it matters.</div>
+      <div class="aaa-hint">Every test in every language follows this three-part shape.</div>
+    </div>
+
+    <p>Six tests came out of this pattern for <code>_advance_due</code>, and each one taught a distinct QA concept. Daily and weekly cases covered the happy path. Monthly across a year boundary covered <strong>boundary value analysis</strong> — the practice of pointing tests at the edges where bugs love to hide. A Jan 31 + one month case covered a <strong>characterisation test</strong>, which locks in the behaviour of a library you don't control (here, <code>dateutil</code>'s decision to clamp Feb 31 to Feb 28). A "recurrence = none" case covered the <strong>negative path</strong>. A zero-interval case covered the function's <strong>defensive clamp</strong>. Six tests, six named ideas, all running in about two hundred milliseconds.</p>
+
+    <p>All six passed on the first run — which raised the more uncomfortable question: <em>would they actually catch a bug if one appeared?</em> A green suite proves the tests passed. It does not prove the tests would fail when they should. The only way to know is to break the code on purpose and watch a test fail. This is called <strong>mutation testing</strong>, and doing it by hand a few times builds the intuition of "would my test have caught the bug I'm worried about?"</p>
+
+    <p>I introduced a mutation: <code>timedelta(days=interval + 1)</code>. The daily test failed with a beautifully clear diff:</p>
+
+    <div class="codeblk"><span class="c">AssertionError:</span> assert <span class="f">date</span>(<span class="n">2026</span>, <span class="n">9</span>, <span class="n">6</span>) == <span class="f">date</span>(<span class="n">2026</span>, <span class="n">9</span>, <span class="n">5</span>)</div>
+
+    <p>Left side: what the code returned. Right side: what the test expected. The diff <em>tells</em> you what the bug did. Then I tried a subtler mutation: removing the <code>max(1, …)</code> clamp on the interval. All six tests still passed. Not because the tests were wrong — because none of them used a negative interval. The gap only revealed itself under mutation, and I added a seventh test to close it. That's mutation thinking in miniature: write reasonable tests, poke the code, discover gaps, close them.</p>
+
+    <div class="section-header">
+      <span class="section-number">06</span>
+      <span class="section-title">Layer 2 — API tests: the contract</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>Unit tests proved one function works. But todo-companion's HTTP endpoints — <code>POST /api/tasks</code>, <code>PATCH /api/tasks/{id}</code>, and so on — are the actual <em>contract</em> the frontend depends on. If someone (probably future me) breaks the JSON shape, or forgets to persist a field, unit tests will not notice. That's what API tests are for.</p>
+
+    <p>FastAPI ships with a <strong>TestClient</strong> that lets tests speak to the app directly, in-memory, without starting a real server or opening a port. A test looks like <code>client.post("/api/tasks", json={"title": "buy milk"})</code>, and the response comes back in about a millisecond. This is called an <strong>in-process API test</strong>: it tests the app just below the network layer, fast enough to run on every save.</p>
+
+    <p>The interesting part isn't the requests. It's <strong>test isolation</strong> — the hardest problem in testing any stateful system. The app opens a connection to <code>data.db</code> at import time. If tests hit that database, test 1 pollutes test 2 pollutes test 3, and by mid-morning your real todo list has fifteen entries called "buy milk". <strong>Every test must run against a fresh, empty database it fully owns.</strong></p>
+
+    <p>The mechanism is a special SQLite connection string — <code>sqlite:///:memory:</code> — that lives entirely in RAM. No file, no persistence, gone when the connection closes. Combined with SQLAlchemy's <code>StaticPool</code>, which forces every request to share the same in-memory connection, we get a fresh database per test that vanishes when the test ends.</p>
+
+    <div class="codeblk"><span class="c"># tests/api/conftest.py</span>
+<span class="k">@pytest.fixture</span>
+<span class="k">def</span> <span class="f">test_engine</span>():
+    engine = <span class="f">create_engine</span>(
+        <span class="s">"sqlite:///:memory:"</span>,
+        connect_args={<span class="s">"check_same_thread"</span>: <span class="k">False</span>},
+        poolclass=<span class="f">StaticPool</span>,
+    )
+    <span class="f">SQLModel.metadata.create_all</span>(engine)
+    <span class="k">yield</span> engine
+    engine.<span class="f">dispose</span>()
+
+<span class="k">@pytest.fixture</span>
+<span class="k">def</span> <span class="f">client</span>(test_engine, monkeypatch):
+    monkeypatch.<span class="f">setattr</span>(app_module, <span class="s">"engine"</span>, test_engine)
+    <span class="k">return</span> <span class="f">TestClient</span>(app_module.app)</div>
+
+    <p>Two <strong>fixtures</strong> — pytest's mechanism for shared setup and teardown. The first spins up a fresh in-memory database for one test. The second uses <code>monkeypatch</code> — a pytest tool that temporarily swaps an attribute for the duration of a test and puts it back automatically — to point the app at that fresh database instead of the real one. Both fixtures use the <code>yield</code> pattern: everything before <code>yield</code> is setup, everything after is teardown, and teardown runs even if the test fails.</p>
+
+    <p>With the fixtures in place, the tests themselves became short. Six covered the endpoints: create returns an id <em>and</em> writes to the database (the second half of that assertion — verifying the side effect, not just the response — is the one beginners skip and the one that catches silent-save bugs); list returns tasks in the right order; patching a task to "done" sets the timestamp; patching a <em>recurring</em> task advances its due date instead of closing it; delete cascades to subtasks; and a non-existent id returns 404 instead of crashing. Six tests, another five hundred milliseconds of runtime, and an entirely new class of bug now impossible to ship.</p>
+
+    <p>Worth noting: the recurring-task behaviour is now tested at two layers — as a pure function (Layer 1) and as a live HTTP round-trip (Layer 2). This isn't redundant. If Layer 1 passes and Layer 2 fails, the <em>logic</em> is fine but the <em>wiring</em> is broken. That diagnostic power — knowing which layer failed tells you where to look — is exactly why the pyramid exists.</p>
+
+    <div class="section-header">
+      <span class="section-number">07</span>
+      <span class="section-title">Layer 3 — End-to-end tests: the whole stack</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>Unit and API tests verify the pieces. But a user doesn't call your endpoints — they open a browser, type in an input, click a button, and expect a task to appear. <strong>End-to-end tests</strong> drive a real browser through a real user journey. They are slow, expensive, and the only tests that catch bugs like "the button is invisible because of a CSS class collision" or "the frontend forgot to re-render after the API succeeded."</p>
+
+    <p><strong>Playwright</strong> is Microsoft's modern browser-automation tool — the successor to Selenium, and the one Playwright's documentation is written around. It drives Chromium, Firefox and WebKit from Python (or JavaScript, or C#) using a small, consistent API. Its killer feature is <strong>auto-waiting</strong>: <code>expect(locator).to_be_visible()</code> keeps re-checking for up to five seconds before giving up. Selenium's classic problem — clicking a button before it existed on the page — simply doesn't happen. That single design decision eliminates most flaky-test pain in a single stroke.</p>
+
+    <p>Playwright is opinionated about <strong>locators</strong> — how you find elements on a page. In order of preference: by <em>role</em> (<code>get_by_role("button", name="Save")</code>, which doubles as an accessibility check), by <em>label</em>, by <em>test id</em> (a purpose-built <code>data-testid</code> attribute), and only as a last resort by CSS class or XPath. Locators tied to visible content and semantics survive redesigns; locators tied to <code>.btn-primary-v3</code> break the moment a designer touches the stylesheet. The right locator strategy is why a mature E2E suite can survive years of UI iteration.</p>
+
+    <p>For dynamically-rendered content — tasks whose text and DOM position change every test — I added two <code>data-testid</code> attributes to the JavaScript that renders task rows. A two-line change bought stable selectors for every future test.</p>
+
+    <p>An E2E suite also has to solve two logistics problems the lower layers don't. First, a real server must be running. Second, the tests must not touch the real database. Both are handled by a single <strong>session-scoped fixture</strong> that starts <code>uvicorn</code> in a subprocess, points it at a temp-file database via an environment variable, polls until it responds, yields the URL to every test, and terminates it at the end. "Session-scoped" means the server starts once for the whole run, not once per test — otherwise a 10-test suite would take a minute of pure startup time.</p>
+
+    <p>Then the tests themselves need a shape that scales. Writing <code>page.locator("#new-task").fill("buy milk")</code> in twenty different tests works until the day someone renames <code>#new-task</code> and twenty tests break at once. The industry solution is the <strong>Page Object Model</strong>: a plain Python class that owns every selector for one page or one part of the UI, exposing user-level methods instead of low-level clicks.</p>
+
+    <div class="codeblk"><span class="c"># tests/e2e/pages/inbox_page.py</span>
+<span class="k">class</span> <span class="f">InboxPage</span>:
+    <span class="k">def</span> <span class="f">__init__</span>(<span class="k">self</span>, page):
+        <span class="k">self</span>.page = page
+        <span class="k">self</span>.task_input       = page.<span class="f">locator</span>(<span class="s">"#new-task"</span>)
+        <span class="k">self</span>.quick_add_button = page.<span class="f">locator</span>(<span class="s">"#btn-quickadd"</span>)
+
+    <span class="k">def</span> <span class="f">add_task</span>(<span class="k">self</span>, title):
+        <span class="k">self</span>.task_input.<span class="f">fill</span>(title)
+        <span class="k">self</span>.quick_add_button.<span class="f">click</span>()
+
+    <span class="k">def</span> <span class="f">expect_task_visible</span>(<span class="k">self</span>, title):
+        <span class="f">expect</span>(<span class="k">self</span>.<span class="f">task_by_title</span>(title)).<span class="f">to_be_visible</span>()</div>
+
+    <p>A test then reads like English: <code>inbox.add_task("buy milk")</code> and <code>inbox.expect_task_visible("buy milk")</code>. If the DOM changes, one file changes. The tests don't care.</p>
+
+    <p>Eight E2E tests covered the real user stories: adding a task, adding several in sequence, adding one with metadata, completing a task, deleting one, the "inbox is empty" state, and — the cross-layer keystone — completing a recurring task and watching it stay visible instead of vanish. That last one is the recurring-task feature verified end-to-end: click flows through Playwright → into the browser → into the JavaScript → into the API → into <code>_advance_due</code> → back through the response → back into the re-render → and the task is still there. Every arrow in that chain has to work. Every arrow now has a test.</p>
+
+    <hr class="rule">
+
+    <div class="section-header">
+      <span class="section-number">—</span>
+      <span class="section-title">Where the suite stands</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <div class="stat-pair">
+      <div class="stat-card teal"><div class="num">6</div><div class="lbl">Unit tests</div></div>
+      <div class="stat-card steel"><div class="num">6</div><div class="lbl">API tests</div></div>
+      <div class="stat-card gold"><div class="num">8</div><div class="lbl">E2E tests</div></div>
+    </div>
+
+    <p>Twenty tests across three layers, running end-to-end in a few seconds on a laptop. Small — but the shape is right. Every future feature has a place to hang new tests; every future refactor has a safety net to catch mistakes. The suite is now a piece of the app, not an afterthought.</p>
+
+    <table>
+      <tr><th>Layer</th><th>Speed</th><th>Catches</th></tr>
+      <tr><td class="metric-name">Unit</td><td>~2 ms</td><td>Logic bugs in pure functions — date maths, calculations, defensive clamps.</td></tr>
+      <tr><td class="metric-name">API</td><td>~80 ms</td><td>Contract bugs — wrong JSON shape, missing DB writes, silent 500s, broken 404 handling.</td></tr>
+      <tr><td class="metric-name">E2E</td><td>~1–2 s</td><td>Full-stack wiring — a CSS class collision, a forgotten re-render, a dialog handler that never fires.</td></tr>
+    </table>
+
+    <div class="section-header">
+      <span class="section-number">—</span>
+      <span class="section-title">What's coming in Part 2</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>The interesting problems are still ahead. todo-companion's central feature — the LLM that breaks a task into subtasks — is <em>non-deterministic</em>. Ask it twice, get slightly different answers. Traditional "the output must equal X" testing collapses on contact with it. Part 2 covers the alternatives: <strong>property-based tests</strong> that assert shape and invariants rather than exact strings, <strong>LLM-as-judge</strong> scoring where a second model rates the first model's output, mocked-Gemini fixtures for speed, and snapshot fixtures for drift detection across model versions. Then <strong>continuous integration</strong> in GitHub Actions to run everything on every push, a set of <strong>seeded bugs</strong> with documented investigations, and an experimental <strong>AI-assisted layer</strong> — a script that generates Playwright skeletons from feature descriptions, and a self-healing selector helper that repairs broken locators by sending the DOM back to a model for a fix.</p>
+
+    <p>That's where the suite stops being a personal-project safety net and starts looking like something a modern QA team would build. For now, twenty tests across three layers is a good place to breathe.</p>
+
+  </article>
+</div>
+
+<footer>
+  <div class="footer-inner">
+    <div class="footer-left">Let's <span>connect</span>.</div>
+    <div class="footer-links">
+      <a href="mailto:vanmaliaakash5@gmail.com">Email</a>
+      <a href="https://github.com/aakashvanmali45" target="_blank">GitHub</a>
+      <a href="https://linkedin.com/in/aakashvanmali" target="_blank">LinkedIn</a>
+    </div>
+  </div>
+  <div class="footer-note">© 2026 Aakash Vanmali · Field notes from building a real test suite, layer by layer</div>
+</footer>
+
+<script>
+// ===== PYRAMID INTERACTIVE =====
+(function(){
+  const layers = {
+    unit: {
+      color: '#5BA68A',
+      title: 'Unit tests',
+      tag: 'Pure Python. One function at a time. Zero I/O.',
+      what: 'A single function called with inputs, its return value checked. In todo-companion: the recurring-task date calculation.',
+      speed: '~2 ms per test — hundreds run per second.',
+      catch: 'Logic bugs in pure code. Boundary cases like year-rollover, month-clamping, negative-interval defence.',
+      trade: 'Blind to anything above the function: wiring, DB writes, UI rendering. That is the price of speed.'
+    },
+    api: {
+      color: '#6B8DAD',
+      title: 'API tests',
+      tag: 'HTTP endpoints. No browser. Isolated in-memory database per test.',
+      what: 'A test speaks HTTP directly to the FastAPI app via TestClient, checks the response and the DB side-effect.',
+      speed: '~80 ms per test — the whole layer finishes in under a second.',
+      catch: 'Contract bugs, missing persistence, wrong JSON shape, 500s dressed as 200s, broken 404s.',
+      trade: 'Cannot see the browser. A frontend that stops re-rendering will look fine to this layer.'
+    },
+    e2e: {
+      color: '#C9A84C',
+      title: 'End-to-end tests',
+      tag: 'A real browser drives a real server through a real user journey.',
+      what: 'Playwright opens Chromium, types into the actual input, clicks the actual button, waits for the actual task to appear.',
+      speed: '~1–2 s per test — the whole layer takes 10–20 s.',
+      catch: 'Full-stack wiring bugs. CSS collisions, missing re-renders, broken dialog handlers, forgotten data-testids.',
+      trade: 'Slow, session-shared state, occasional flake. Kept small on purpose and used only where nothing lower can substitute.'
+    }
+  };
+
+  const svg = document.querySelector('.pyramid-svg');
+  const el = {
+    eye: document.querySelector('.pp-eyebrow'),
+    sw: document.querySelector('.pp-eyebrow .sw'),
+    title: document.getElementById('ppTitle'),
+    tag: document.getElementById('ppTag'),
+    what: document.getElementById('ppWhat'),
+    speed: document.getElementById('ppSpeed'),
+    catch: document.getElementById('ppCatch'),
+    trade: document.getElementById('ppTrade'),
+  };
+
+  function activate(key){
+    const L = layers[key];
+    if(!L) return;
+    el.sw.style.background = L.color;
+    el.eye.childNodes[el.eye.childNodes.length-1].textContent = ' selected: ' + key.toUpperCase();
+    el.title.textContent = L.title;
+    el.tag.textContent = L.tag;
+    el.what.textContent = L.what;
+    el.speed.textContent = L.speed;
+    el.catch.textContent = L.catch;
+    el.trade.textContent = L.trade;
+
+    // reset all layer fill opacities, then boost the active one
+    svg.querySelectorAll('.pyramid-layer polygon').forEach(p => {
+      p.setAttribute('fill-opacity', '0.28');
+      p.setAttribute('stroke-opacity', '0.55');
+      p.setAttribute('stroke-width', '1.2');
+    });
+    const target = svg.querySelector('[data-layer="'+key+'"] polygon');
+    if(target){
+      target.setAttribute('fill-opacity', '0.65');
+      target.setAttribute('stroke-opacity', '1');
+      target.setAttribute('stroke-width', '2');
+    }
+  }
+
+  svg.querySelectorAll('.pyramid-layer').forEach(g => {
+    const key = g.dataset.layer;
+    g.addEventListener('mouseenter', () => activate(key));
+    g.addEventListener('click', () => activate(key));
+    g.addEventListener('touchstart', (e) => { e.preventDefault(); activate(key); }, {passive:false});
+  });
+
+  // start with unit selected
+  activate('unit');
+})();
+
+// ===== AAA INTERACTIVE =====
+(function(){
+  const captions = {
+    arrange: '<strong>Arrange —</strong> set up the inputs. Deterministic values only: no "today", no randomness. Here we pick a specific Friday so the test gives the same answer every run.',
+    act:     '<strong>Act —</strong> call the one thing under test. Nothing else happens in this section — no setup, no assertions, just the single function invocation whose output we care about.',
+    assert:  '<strong>Assert —</strong> compare the result to the expected value. When this fails, the assertion diff tells you exactly what the code returned versus what you expected. That diff is the whole point of the test.'
+  };
+
+  const lines = document.querySelectorAll('.aaa-line');
+  const cap = document.getElementById('aaaCaption');
+
+  function activate(part){
+    lines.forEach(l => l.classList.toggle('active', l.dataset.part === part));
+    cap.className = 'aaa-caption ' + part;
+    cap.innerHTML = captions[part];
+  }
+
+  lines.forEach(line => {
+    const part = line.dataset.part;
+    line.addEventListener('mouseenter', () => activate(part));
+    line.addEventListener('click', () => activate(part));
+    line.addEventListener('touchstart', (e) => { e.preventDefault(); activate(part); }, {passive:false});
+  });
+
+  // start with arrange
+  activate('arrange');
+})();
+</script>
+
+</body>
+</html>
