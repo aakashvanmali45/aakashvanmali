@@ -1,1293 +1,1008 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Teaching a Transformer to See Trees — Study Notes on Tree Positional Encoding · Aakash Vanmali</title>
-<meta name="description" content="Study notes on tree positional encoding: why a flat sequence loses the shape of code, and how Peng et al. (EMNLP 2022) give every AST node a coordinate the attention layer can read. Includes an interactive AST builder. Part 1.">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aakash Vanmali — AI &amp; Computer Vision Researcher</title>
+  <meta name="description" content="Aakash Vanmali — Research in VLMs, zero-shot visual understanding, and vision-language-action models. Seeking PhD positions in Europe.">
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-<style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  :root{
-    --ink:#0B1222; --ink-light:#111B2E; --ink-surface:#162038;
-    --gold:#C9A84C; --gold-dim:rgba(201,168,76,0.15); --gold-glow:rgba(201,168,76,0.08);
-    --paper:#F6F2E8; --paper-white:#FDFBF5;
-    --text-dark:#1A1A1A; --text-mid:#4A4A4A; --text-light:#777;
-    --text-on-ink:#C8C8D4; --text-bright:#E8E8F0;
-    --border-paper:#E0D8C8; --border-ink:rgba(255,255,255,0.08);
-    --serif:'Cormorant Garamond', Georgia, serif;
-    --sans:'Space Grotesk', -apple-system, sans-serif;
-    --mono:'JetBrains Mono', monospace;
-    --max-w:780px;
-    --ease: cubic-bezier(0.25,0.46,0.45,0.94);
-    --teal:#5BA68A;
-    --steel:#6B8DAD;
-    --amber:#D4956B;
-    --lavender:#8B7DB8;
-  }
-  html{ font-size:17px; scroll-behavior:smooth; }
-  body{ font-family:var(--sans); color:var(--text-dark); background:var(--paper); line-height:1.7; -webkit-font-smoothing:antialiased; }
-  ::selection{ background:var(--gold); color:var(--ink); }
-  a{ color:var(--gold); text-decoration:none; transition:color .2s; }
-  a:hover{ text-decoration:underline; }
+    :root {
+      --ink: #0B1222;
+      --ink-light: #111B2E;
+      --ink-surface: #162038;
+      --gold: #C9A84C;
+      --gold-dim: rgba(201, 168, 76, 0.15);
+      --gold-glow: rgba(201, 168, 76, 0.08);
+      --paper: #F6F2E8;
+      --paper-white: #FDFBF5;
+      --text-dark: #1A1A1A;
+      --text-mid: #4A4A4A;
+      --text-light: #777;
+      --text-on-ink: #C8C8D4;
+      --text-bright: #E8E8F0;
+      --border-paper: #E0D8C8;
+      --border-ink: rgba(255,255,255,0.06);
+      --serif: 'Cormorant Garamond', Georgia, serif;
+      --sans: 'Space Grotesk', -apple-system, sans-serif;
+      --mono: 'JetBrains Mono', monospace;
+      --max-w: 780px;
+      --ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
 
-  /* ===== TOPBAR ===== */
-  .topbar{ background:var(--ink); padding:1.1rem 0; }
-  .topbar-inner{ max-width:var(--max-w); margin:0 auto; padding:0 2rem; display:flex; justify-content:space-between; align-items:center; }
-  .topbar-name{ font-family:var(--serif); font-weight:600; font-size:1.15rem; color:var(--text-on-ink); }
-  .topbar-name span{ color:var(--gold); }
-  .topbar-links{ display:flex; gap:1.4rem; }
-  .topbar-links a{ font-family:var(--mono); font-size:0.72rem; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-on-ink); opacity:0.75; }
-  .topbar-links a:hover{ color:var(--gold); opacity:1; text-decoration:none; }
+    html { font-size: 17px; scroll-behavior: smooth; }
+    body {
+      font-family: var(--sans);
+      color: var(--text-dark);
+      background: var(--paper);
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
 
-  /* ===== HERO ===== */
-  .hero{ background:var(--ink); padding: 4.5rem 0 4rem; position:relative; overflow:hidden; }
-  .hero::after{
-    content:''; position:absolute; top:-20%; right:-10%; width:480px; height:480px; border-radius:50%;
-    background:radial-gradient(circle, rgba(201,168,76,0.10), transparent 70%);
-  }
-  .hero-inner{ max-width:var(--max-w); margin:0 auto; padding:0 2rem; position:relative; z-index:1; }
-  .hero-eyebrow{ font-family:var(--mono); font-size:0.7rem; letter-spacing:0.2em; text-transform:uppercase; color:var(--gold); margin-bottom:1.2rem; }
-  .hero h1{ font-family:var(--serif); font-weight:600; font-size:3rem; color:var(--text-bright); line-height:1.1; letter-spacing:-0.01em; margin-bottom:1rem; max-width:640px; }
-  .hero-dek{ font-family:var(--serif); font-style:italic; font-size:1.25rem; color:rgba(201,168,76,0.85); max-width:560px; line-height:1.5; }
-  .hero-meta{ font-family:var(--mono); font-size:0.68rem; letter-spacing:0.08em; text-transform:uppercase; color:rgba(200,200,212,0.4); margin-top:2rem; }
-  .hero-tree{ position:absolute; right:2rem; bottom:1.4rem; width:210px; opacity:0.75; z-index:0; }
-  .hero-tree line{ stroke:rgba(201,168,76,0.35); stroke-width:1; }
-  .hero-tree circle{ fill:var(--ink); stroke:rgba(201,168,76,0.6); stroke-width:1; }
-  .hero-tree circle.v{ stroke-dasharray:3 2; stroke:rgba(200,200,212,0.35); }
-  .hero-tree text{ font-family:var(--mono); font-size:7px; fill:rgba(201,168,76,0.75); text-anchor:middle; }
+    ::selection { background: var(--gold); color: var(--ink); }
 
-  /* ===== CONTENT ===== */
-  .content{ max-width:var(--max-w); margin:0 auto; padding:0 2rem; }
-  article{ padding:3.5rem 0 1rem; }
-  .section-header{ display:flex; align-items:center; gap:1rem; margin: 3.4rem 0 1.6rem; }
-  .section-header:first-of-type{ margin-top:0; }
-  .section-number{ font-family:var(--serif); font-size:2rem; font-weight:300; color:var(--gold); line-height:1; opacity:0.6; }
-  .section-title{ font-family:var(--serif); font-size:1.5rem; font-weight:600; color:var(--text-dark); letter-spacing:-0.01em; }
-  .section-rule{ flex:1; height:1px; background:var(--border-paper); }
-  h3.sub{ font-family:var(--serif); font-size:1.25rem; font-weight:600; color:var(--text-dark); margin:2.3rem 0 0.7rem; letter-spacing:-0.005em; }
+    a { color: var(--gold); text-decoration: none; transition: color 0.2s; }
 
-  p{ margin:0 0 1.15rem; font-size:0.98rem; color:var(--text-mid); }
-  p.lead{ font-family:var(--serif); font-size:1.35rem; font-style:italic; color:var(--text-dark); line-height:1.6; }
-  strong{ color:var(--text-dark); font-weight:600; }
-  em{ color:var(--text-dark); }
-  code{ font-family:var(--mono); background:var(--paper-white); border:1px solid var(--border-paper); padding:1px 6px; font-size:0.85em; color:var(--gold); border-radius:2px; }
-  sub, sup{ font-size:0.7em; line-height:0; }
+    /* ===== HERO ===== */
+    .hero {
+      position: relative;
+      min-height: 100vh;
+      background: var(--ink);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .hero-canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+    .hero::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 180px;
+      background: linear-gradient(to bottom, transparent, var(--paper));
+      z-index: 2;
+    }
+    .hero-content {
+      position: relative;
+      z-index: 3;
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 0 2rem;
+      width: 100%;
+    }
+    .hero-eyebrow {
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 1.2rem;
+      opacity: 0;
+      animation: fadeUp 0.8s var(--ease) 0.2s forwards;
+    }
+    .hero h1 {
+      font-family: var(--serif);
+      font-size: 4.5rem;
+      font-weight: 600;
+      color: var(--text-bright);
+      line-height: 1.05;
+      margin-bottom: 0.8rem;
+      letter-spacing: -0.02em;
+      opacity: 0;
+      animation: fadeUp 0.8s var(--ease) 0.4s forwards;
+    }
+    .hero-tagline {
+      font-family: var(--serif);
+      font-size: 1.55rem;
+      font-weight: 400;
+      font-style: italic;
+      color: var(--gold);
+      margin-bottom: 0.6rem;
+      opacity: 0;
+      animation: fadeUp 0.8s var(--ease) 0.6s forwards;
+    }
+    .hero-affiliation {
+      font-size: 0.88rem;
+      font-weight: 300;
+      color: var(--text-on-ink);
+      line-height: 1.6;
+      margin-bottom: 2rem;
+      opacity: 0;
+      animation: fadeUp 0.8s var(--ease) 0.7s forwards;
+    }
+    .hero-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      opacity: 0;
+      animation: fadeUp 0.8s var(--ease) 0.85s forwards;
+    }
+    .hero-links a {
+      font-size: 0.8rem;
+      font-weight: 500;
+      padding: 0.5rem 1.1rem;
+      border: 1px solid rgba(201, 168, 76, 0.3);
+      border-radius: 2px;
+      color: var(--text-on-ink);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: all 0.25s;
+      backdrop-filter: blur(4px);
+      background: rgba(255,255,255,0.02);
+    }
+    .hero-links a:hover {
+      border-color: var(--gold);
+      color: var(--gold);
+      background: var(--gold-dim);
+    }
+    .hero-links svg { width: 14px; height: 14px; flex-shrink: 0; }
 
-  .formula-block{
-    font-family:var(--mono); background:var(--paper-white); border:1px solid var(--border-paper); border-left:3px solid var(--gold);
-    padding:1rem 1.3rem; margin:1.3rem 0; font-size:0.92rem; color:var(--text-dark); overflow-x:auto; line-height:1.9;
-  }
-  .formula-block .name{ font-family:var(--sans); font-weight:600; color:var(--gold); font-size:0.78rem; letter-spacing:0.04em; text-transform:uppercase; display:block; margin-bottom:0.3rem;}
-  .formula-block .sub{ font-family:var(--sans); color:var(--text-light); font-size:0.8rem; margin-top:0.5rem; line-height:1.55; display:block; }
-  .formula-block .case{ color:var(--text-light); font-size:0.82rem; }
+    /* Epigraph — fades in after the dots connect */
+    .hero-quote {
+      margin-top: 2.4rem;
+      max-width: 440px;
+      opacity: 0;
+      transition: opacity 1.6s var(--ease);
+    }
+    .hero-quote.visible { opacity: 1; }
+    .hero-quote p {
+      font-family: var(--serif);
+      font-style: italic;
+      font-size: 1.18rem;
+      font-weight: 400;
+      color: rgba(201, 168, 76, 0.82);
+      line-height: 1.5;
+      position: relative;
+      padding-left: 1rem;
+      border-left: 1px solid rgba(201, 168, 76, 0.3);
+    }
+    .hero-quote span {
+      display: block;
+      font-family: var(--mono);
+      font-size: 0.6rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: rgba(200, 200, 212, 0.45);
+      margin-top: 0.6rem;
+      padding-left: 1rem;
+    }
+    .scroll-hint {
+      position: absolute;
+      bottom: 2.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 3;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      opacity: 0;
+      animation: fadeUp 0.8s var(--ease) 1.2s forwards;
+    }
+    .scroll-hint span {
+      font-family: var(--mono);
+      font-size: 0.6rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: rgba(200,200,212,0.4);
+    }
+    .scroll-line {
+      width: 1px; height: 28px;
+      background: linear-gradient(to bottom, rgba(201,168,76,0.5), transparent);
+      animation: scrollPulse 2s ease-in-out infinite;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(18px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes scrollPulse {
+      0%, 100% { opacity: 0.3; }
+      50% { opacity: 0.8; }
+    }
 
-  blockquote{ margin:1.8rem 0; padding:0.2rem 0 0.2rem 1.3rem; border-left:2px solid var(--gold); font-family:var(--serif); font-style:italic; color:var(--text-mid); font-size:1.15rem; }
+    /* ===== STICKY NAV ===== */
+    .sticky-nav {
+      position: fixed;
+      top: -60px; left: 0; right: 0;
+      z-index: 50;
+      background: rgba(246, 242, 232, 0.92);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border-paper);
+      transition: top 0.35s var(--ease);
+    }
+    .sticky-nav.visible { top: 0; }
+    .sticky-nav-inner {
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 0.7rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .sticky-nav-name {
+      font-family: var(--serif);
+      font-weight: 600;
+      font-size: 1.05rem;
+      color: var(--text-dark);
+      text-decoration: none;
+    }
+    .sticky-nav-links { display: flex; gap: 1.5rem; }
+    .sticky-nav-links a {
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: var(--text-light);
+      letter-spacing: 0.03em;
+    }
+    .sticky-nav-links a:hover { color: var(--text-dark); text-decoration: none; }
 
-  .callout{ background:var(--paper-white); border:1px solid var(--border-paper); border-left:3px solid var(--steel); padding:1rem 1.3rem; margin:1.5rem 0; font-size:0.92rem; color:var(--text-mid); }
-  .callout strong{ color:var(--steel); }
-  .callout.gold{ border-left-color:var(--gold); }
-  .callout.gold strong{ color:var(--gold); }
-  .callout.teal{ border-left-color:var(--teal); }
-  .callout.teal strong{ color:var(--teal); }
-  .callout p:last-child{ margin-bottom:0; }
+    /* ===== CONTENT ===== */
+    .content {
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 0 2rem;
+    }
+    section { padding: 3.5rem 0; }
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .section-number {
+      font-family: var(--serif);
+      font-size: 2.2rem;
+      font-weight: 300;
+      color: var(--gold);
+      line-height: 1;
+      opacity: 0.6;
+    }
+    .section-title {
+      font-family: var(--serif);
+      font-size: 1.6rem;
+      font-weight: 600;
+      color: var(--text-dark);
+      letter-spacing: -0.01em;
+    }
+    .section-rule {
+      flex: 1; height: 1px;
+      background: var(--border-paper);
+    }
+    .reveal {
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity 0.6s var(--ease), transform 0.6s var(--ease);
+    }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
 
-  .question{ margin:2.2rem 0 1rem; padding:1.1rem 1.3rem; background:var(--paper-white); border:1px solid var(--border-paper); border-left:3px solid var(--gold); }
-  .question .q-label{ font-family:var(--mono); font-size:0.64rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--gold); margin-bottom:0.3rem; }
-  .question .q-text{ font-family:var(--serif); font-size:1.3rem; font-weight:600; color:var(--text-dark); line-height:1.35; }
+    /* ---- SEEKING BANNER ---- */
+    .seeking-banner {
+      background: var(--ink);
+      color: var(--text-on-ink);
+      padding: 1.4rem 1.8rem;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 3rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .seeking-banner::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 4px;
+      background: var(--gold);
+    }
+    .seeking-icon {
+      width: 8px; height: 8px;
+      background: var(--gold);
+      border-radius: 50%;
+      flex-shrink: 0;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(201,168,76,0.4); }
+      50% { box-shadow: 0 0 0 8px rgba(201,168,76,0); }
+    }
+    .seeking-banner p { font-size: 0.88rem; font-weight: 400; }
+    .seeking-banner strong { color: var(--gold); font-weight: 600; }
 
-  ol.route{ list-style:none; margin:1.4rem 0 1.6rem; border-top:1px solid var(--border-paper); }
-  ol.route li{ display:grid; grid-template-columns:2.6rem 1fr; padding:0.55rem 0; border-bottom:1px solid var(--border-paper); font-size:0.92rem; color:var(--text-mid); }
-  ol.route li span{ font-family:var(--serif); font-size:1.15rem; color:var(--gold); opacity:0.7; line-height:1.4; }
+    /* ---- NEWS ---- */
+    .news-item {
+      display: grid;
+      grid-template-columns: 6rem 1fr;
+      gap: 0;
+      padding: 0.6rem 0;
+      border-bottom: 1px solid rgba(0,0,0,0.05);
+      font-size: 0.88rem;
+    }
+    .news-item:last-child { border-bottom: none; }
+    .news-date {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--text-light);
+      padding-top: 0.12rem;
+    }
+    .news-text { color: var(--text-dark); }
 
-  /* ===== TABLE ===== */
-  .table-wrap{ overflow-x:auto; margin:1.4rem 0; }
-  table{ width:100%; border-collapse:collapse; font-size:0.9rem; }
-  th,td{ text-align:left; padding:0.65rem 0.6rem; border-bottom:1px solid var(--border-paper); vertical-align:top; }
-  th{ font-family:var(--mono); font-size:0.62rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-light); font-weight:500;}
-  td{ color:var(--text-mid); }
-  td.metric-name{ color:var(--text-dark); font-weight:600; font-family:var(--sans); }
-  td.mono{ font-family:var(--mono); font-size:0.82rem; color:var(--text-dark); }
-  tr:last-child td{ border-bottom:none; }
+    /* ---- RESEARCH ---- */
+    .research-statement {
+      font-family: var(--serif);
+      font-size: 1.15rem;
+      line-height: 1.85;
+      color: var(--text-dark);
+      margin-bottom: 1.8rem;
+    }
+    .research-statement strong { font-weight: 600; color: var(--ink); }
+    .topics-wrap { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .topic-pill {
+      font-size: 0.78rem;
+      font-weight: 500;
+      padding: 0.4rem 0.9rem;
+      background: var(--paper-white);
+      border: 1px solid var(--border-paper);
+      color: var(--text-mid);
+      border-radius: 0;
+      transition: all 0.2s;
+    }
+    .topic-pill:hover {
+      border-color: var(--gold);
+      color: var(--gold);
+      background: var(--gold-glow);
+    }
 
-  /* ===== CODE BLOCK ===== */
-  .codeblk{
-    font-family:var(--mono); background:var(--paper-white); border:1px solid var(--border-paper); border-left:3px solid var(--steel);
-    padding:1rem 1.3rem; margin:1.3rem 0; font-size:0.82rem; color:var(--text-dark); overflow-x:auto; line-height:1.75; white-space:pre;
-  }
-  .codeblk .c{ color:var(--text-light); font-style:italic; }
-  .codeblk .k{ color:var(--steel); }
-  .codeblk .s{ color:var(--teal); }
-  .codeblk .n{ color:var(--amber); }
-  .codeblk .d{ color:var(--gold); }
+    /* ---- EXPERIENCE ---- */
+    .exp-timeline { position: relative; padding-left: 2rem; }
+    .exp-timeline::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0.6rem; bottom: 0.6rem;
+      width: 1px;
+      background: linear-gradient(to bottom, var(--gold), var(--border-paper));
+    }
+    .exp-entry { position: relative; margin-bottom: 2.5rem; }
+    .exp-entry:last-child { margin-bottom: 0; }
+    .exp-entry::before {
+      content: '';
+      position: absolute;
+      left: -2rem; top: 0.55rem;
+      width: 9px; height: 9px;
+      background: var(--paper);
+      border: 2px solid var(--gold);
+      border-radius: 50%;
+      transform: translateX(-4px);
+    }
+    .exp-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 0.3rem;
+      margin-bottom: 0.15rem;
+    }
+    .exp-role { font-weight: 600; font-size: 0.95rem; color: var(--text-dark); }
+    .exp-dates { font-family: var(--mono); font-size: 0.72rem; color: var(--text-light); }
+    .exp-org { font-size: 0.85rem; color: var(--text-mid); margin-bottom: 0.5rem; }
+    .exp-desc { font-size: 0.85rem; line-height: 1.75; color: var(--text-mid); }
 
-  /* ===== FIGURE (paper) ===== */
-  .fig{ background:var(--paper-white); border:1px solid var(--border-paper); padding:1.2rem 1.4rem; margin:1.5rem 0; }
-  .bag-row{ display:flex; align-items:center; gap:0.45rem; flex-wrap:wrap; margin:0.45rem 0; }
-  .bag-row .w{ font-family:var(--mono); font-size:0.78rem; padding:0.18rem 0.55rem; border:1px solid var(--border-paper); background:var(--paper); color:var(--text-dark); }
-  .bag-row .arrow{ color:var(--text-light); margin:0 0.3rem; font-family:var(--mono); font-size:0.8rem; }
-  .bag-row .bag{ font-family:var(--mono); font-size:0.78rem; color:var(--gold); border:1px dashed var(--gold); padding:0.18rem 0.75rem; border-radius:999px; background:var(--gold-glow); }
-  .fig-cap{ font-size:0.8rem; color:var(--text-light); margin-top:0.7rem; line-height:1.55; }
+    /* ---- PROJECTS ---- */
+    .projects-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .proj-card {
+      background: var(--paper-white);
+      border: 1px solid var(--border-paper);
+      padding: 1.3rem 1.4rem;
+      display: flex; flex-direction: column;
+      transition: all 0.3s var(--ease);
+      position: relative;
+    }
+    .proj-card:hover {
+      border-color: var(--gold);
+      box-shadow: 0 6px 24px rgba(0,0,0,0.06);
+      transform: translateY(-3px);
+    }
+    .proj-name { font-family: var(--serif); font-weight: 600; font-size: 1rem; line-height: 1.35; margin-bottom: 0.4rem; }
+    .proj-name a { color: var(--text-dark); text-decoration: none; }
+    .proj-name a:hover { color: var(--gold); }
+    .proj-desc { font-size: 0.8rem; line-height: 1.6; color: var(--text-mid); margin-bottom: 0.8rem; flex: 1; }
+    .proj-stack { font-family: var(--mono); font-size: 0.65rem; color: var(--text-light); letter-spacing: 0.02em; }
+    .proj-arrow { position: absolute; top: 1.2rem; right: 1.2rem; font-size: 0.85rem; color: var(--border-paper); transition: all 0.2s; }
+    .proj-card:hover .proj-arrow { color: var(--gold); transform: translate(2px, -2px); }
 
-  /* ===== INTERACTIVE LABS (ink panels, shared) ===== */
-  .lab{ background:var(--ink); padding:1.6rem 1.5rem 1.8rem; margin:2rem 0 1rem; position:relative; overflow:hidden; }
-  .lab::before{ content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--gold); }
-  .lab-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:1.1rem; flex-wrap:wrap; gap:0.6rem; }
-  .lab-title{ font-family:var(--mono); font-size:0.72rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--gold); display:flex; align-items:center; gap:0.5rem; }
-  .lab-title .dot{ width:6px; height:6px; border-radius:50%; background:var(--gold); animation:blink 2s infinite; }
-  .lab-sub{ font-family:var(--mono); font-size:0.64rem; color:rgba(200,200,212,0.45); }
-  @keyframes blink{ 50%{ opacity:0.3; } }
+    /* ---- EDUCATION ---- */
+    .edu-block { display: flex; gap: 1.2rem; align-items: flex-start; }
+    .edu-marker {
+      width: 40px; height: 40px;
+      background: var(--ink);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; margin-top: 0.15rem;
+    }
+    .edu-marker svg { width: 18px; height: 18px; color: var(--gold); }
+    .edu-degree { font-family: var(--serif); font-weight: 600; font-size: 1.05rem; color: var(--text-dark); }
+    .edu-school { font-size: 0.88rem; color: var(--text-mid); }
+    .edu-detail { font-size: 0.82rem; color: var(--text-light); font-style: italic; }
 
-  .lab-btns{ display:flex; flex-wrap:wrap; gap:0.45rem; margin-bottom:0.9rem; align-items:center; }
-  .lab-btn{
-    font-family:var(--mono); font-size:0.68rem; letter-spacing:0.03em; padding:0.45rem 0.85rem;
-    border:1px solid rgba(201,168,76,0.3); border-radius:2px; background:rgba(255,255,255,0.02); color:var(--text-on-ink);
-    cursor:pointer; transition:all 0.2s;
-  }
-  .lab-btn:hover{ border-color:var(--gold); color:var(--gold); background:var(--gold-dim); }
-  .lab-btn.on{ background:var(--gold); color:var(--ink); border-color:var(--gold); }
-  .lab-btn.ghost{ border-color:rgba(255,255,255,0.12); }
-  .lab-btn:focus-visible, .tn:focus-visible, .tri .c:focus-visible{ outline:2px solid var(--gold); outline-offset:2px; }
-  .lab-label{ font-family:var(--mono); font-size:0.6rem; text-transform:uppercase; letter-spacing:0.08em; color:rgba(200,200,212,0.5); margin:0.2rem 0.4rem 0 0; }
+    /* ===== FOOTER ===== */
+    footer { background: var(--ink); color: var(--text-on-ink); margin-top: 3rem; }
+    .footer-inner {
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 3rem 2rem;
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: 1rem;
+    }
+    .footer-left { font-family: var(--serif); font-size: 1.3rem; font-weight: 500; }
+    .footer-left span { color: var(--gold); }
+    .footer-links { display: flex; gap: 1.5rem; }
+    .footer-links a { font-size: 0.82rem; color: var(--text-on-ink); opacity: 0.6; transition: opacity 0.2s; }
+    .footer-links a:hover { opacity: 1; color: var(--gold); text-decoration: none; }
+    .footer-bottom {
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 0 2rem 2rem;
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      color: rgba(200,200,212,0.3);
+    }
 
-  .lab textarea{
-    width:100%; min-height:132px; font-family:var(--mono); font-size:0.82rem; line-height:1.6; tab-size:4;
-    background:rgba(255,255,255,0.04); border:1px solid var(--border-ink); color:var(--text-bright);
-    padding:0.8rem 1rem; resize:vertical; border-radius:0;
-  }
-  .lab textarea:focus{ outline:none; border-color:rgba(201,168,76,0.5); }
-  .lab-status{ font-family:var(--mono); font-size:0.64rem; color:rgba(200,200,212,0.5); margin:0.55rem 0 0.9rem; min-height:1rem; }
-  .lab-status.err{ color:var(--amber); }
-
-  .tree-host{ background:rgba(255,255,255,0.03); border:1px solid var(--border-ink); overflow-x:auto; padding:0.5rem 0; }
-  .tree-host svg{ display:block; margin:0 auto; }
-  .seq-label{ font-family:var(--mono); font-size:0.6rem; text-transform:uppercase; letter-spacing:0.08em; color:rgba(200,200,212,0.5); margin:1rem 0 0.4rem; }
-  .seq{ display:flex; flex-wrap:wrap; gap:0.3rem; min-height:1.7rem; }
-  .seq .chip{ font-family:var(--mono); font-size:0.64rem; padding:0.18rem 0.45rem; border:1px solid var(--border-ink); color:var(--text-on-ink); background:rgba(255,255,255,0.03); animation:chipIn .3s var(--ease); }
-  .seq .chip i{ font-style:normal; color:var(--gold); margin-right:0.3rem; opacity:0.8; }
-  @keyframes chipIn{ from{ opacity:0; transform:translateY(3px);} to{ opacity:1; transform:none; } }
-
-  .lab-info{
-    margin-top:1rem; padding:0.8rem 1rem; background:rgba(255,255,255,0.04); border:1px solid var(--border-ink);
-    font-family:var(--sans); font-size:0.82rem; color:rgba(200,200,212,0.75); line-height:1.55; min-height:2.6rem;
-    border-left:3px solid rgba(255,255,255,0.15); transition:border-color 0.25s ease;
-  }
-  .lab-info.active{ border-left-color:var(--gold); }
-  .lab-info strong{ color:var(--text-bright); font-weight:600; }
-  .lab-info code{ background:rgba(255,255,255,0.05); border-color:var(--border-ink); }
-  .lab-hint{ font-family:var(--mono); font-size:0.62rem; color:rgba(200,200,212,0.45); text-align:center; margin-top:0.8rem; }
-
-  /* tree svg */
-  .te{ fill:none; stroke:rgba(255,255,255,0.2); stroke-width:1.2; transition:stroke .2s, opacity .35s; }
-  .te.v{ stroke-dasharray:4 3; stroke:rgba(200,200,212,0.25); }
-  .te.path{ stroke:var(--gold); stroke-width:1.9; }
-  .tn{ cursor:pointer; transition:opacity .35s; outline:none; }
-  .tn rect{ fill:rgba(255,255,255,0.04); stroke:rgba(107,141,173,0.75); stroke-width:1.1; transition:all .2s; }
-  .tn.leaf rect{ stroke:rgba(91,166,138,0.8); }
-  .tn.root rect{ stroke:rgba(201,168,76,0.8); }
-  .tn.virtual{ cursor:default; }
-  .tn.virtual rect{ fill:none; stroke:rgba(200,200,212,0.35); stroke-dasharray:4 3; }
-  .tn.virtual .ty{ fill:rgba(200,200,212,0.5); font-style:italic; }
-  .tn:hover rect{ fill:rgba(255,255,255,0.09); }
-  .tn.path rect{ stroke:var(--gold); }
-  .tn.sel rect, .tn.hl rect{ fill:rgba(201,168,76,0.22); stroke:var(--gold); stroke-width:1.7; }
-  .tn .ty{ font-family:var(--sans); font-size:10.5px; font-weight:500; fill:var(--text-bright); text-anchor:middle; pointer-events:none; }
-  .tn .va{ font-family:var(--mono); font-size:9.5px; fill:var(--gold); text-anchor:middle; pointer-events:none; }
-  .pending{ opacity:0; }
-
-  /* explorer */
-  .ex-grid{ display:grid; grid-template-columns:1.1fr 1fr; gap:1.2rem; }
-  @media (max-width:720px){ .ex-grid{ grid-template-columns:1fr; } }
-  .pp{ background:rgba(255,255,255,0.03); border:1px solid var(--border-ink); padding:1.1rem 1.2rem; }
-  .pp-eyebrow{ font-family:var(--mono); font-size:0.6rem; text-transform:uppercase; letter-spacing:0.08em; color:rgba(200,200,212,0.55); margin-bottom:0.4rem; }
-  .pp-title{ font-family:var(--serif); font-size:1.4rem; font-weight:600; color:var(--text-bright); margin-bottom:0.3rem; }
-  .pp-tag{ font-family:var(--sans); font-size:0.8rem; color:rgba(200,200,212,0.65); font-style:italic; margin-bottom:0.8rem; line-height:1.5; }
-  .pp-row{ display:grid; grid-template-columns:4.8rem 1fr; gap:0.7rem; padding:0.6rem 0; border-top:1px solid var(--border-ink); font-size:0.78rem; }
-  .pp-k{ font-family:var(--mono); font-size:0.6rem; color:rgba(200,200,212,0.5); text-transform:uppercase; letter-spacing:0.06em; padding-top:3px; }
-  .pp-v{ color:rgba(200,200,212,0.85); line-height:1.55; min-width:0; }
-  .pp-v .m{ font-family:var(--mono); font-size:0.72rem; color:var(--text-bright); }
-  .coords{ display:flex; flex-wrap:wrap; gap:0.3rem; margin-bottom:0.35rem; }
-  .coord{ font-family:var(--mono); font-size:0.7rem; color:var(--ink); background:var(--gold); padding:0.1rem 0.42rem; }
-  .coord.last{ outline:1px solid var(--gold); outline-offset:2px; }
-  .hslots{ display:grid; grid-template-columns:repeat(8, 1fr); gap:3px; margin:0.15rem 0 0.4rem; }
-  .hs{ font-family:var(--mono); font-size:0.52rem; text-align:center; padding:0.32rem 0; border:1px dashed rgba(255,255,255,0.14); color:rgba(200,200,212,0.35); }
-  .hs.f{ border:1px solid rgba(201,168,76,0.6); background:var(--gold-dim); color:var(--gold); }
-  .neg{ color:var(--amber); }
-  .pos{ color:var(--teal); }
-
-  /* triangle */
-  .tri-wrap{ max-width:540px; margin:0 auto; }
-  .tri{ display:grid; grid-template-columns:1.5rem repeat(16, 1fr); gap:2px; }
-  .tri .c{ aspect-ratio:1; background:rgba(255,255,255,0.025); border:1px solid rgba(255,255,255,0.04); }
-  .tri .c.v{ background:rgba(91,166,138,0.22); border-color:rgba(91,166,138,0.45); cursor:pointer; transition:background .2s, border-color .2s; }
-  .tri .c.v.off{ background:rgba(255,255,255,0.03); border-color:rgba(255,255,255,0.07); }
-  .tri .c.v:hover{ border-color:var(--text-bright); }
-  .tri .c.used{ background:var(--gold) !important; border-color:var(--gold) !important; }
-  .tri .c.focus{ background:rgba(201,168,76,0.55) !important; border-color:var(--gold) !important; }
-  .tri .ax{ font-family:var(--mono); font-size:0.5rem; color:rgba(200,200,212,0.45); display:flex; align-items:center; justify-content:center; }
-  .tri-axis{ font-family:var(--mono); font-size:0.58rem; color:rgba(200,200,212,0.5); text-align:center; margin-top:0.4rem; letter-spacing:0.04em; }
-  .tri-axis.y{ text-align:left; margin:0 0 0.4rem; }
-  .tri-ctrl{ display:flex; align-items:center; gap:1rem; flex-wrap:wrap; margin-top:1.1rem; }
-  .tri-ctrl input[type=range]{ flex:1; min-width:160px; accent-color:var(--gold); }
-  .tri-count{ font-family:var(--serif); font-size:2rem; font-weight:700; color:var(--gold); line-height:1; }
-  .tri-count small{ font-family:var(--mono); font-size:0.6rem; font-weight:400; color:rgba(200,200,212,0.5); letter-spacing:0.05em; display:block; margin-top:0.25rem; text-transform:uppercase; }
-  .tri-legend{ display:flex; gap:1rem; flex-wrap:wrap; font-family:var(--mono); font-size:0.58rem; color:rgba(200,200,212,0.55); margin-top:0.8rem; }
-  .tri-legend span::before{ content:''; display:inline-block; width:9px; height:9px; margin-right:0.35rem; vertical-align:-1px; }
-  .tri-legend .l1::before{ background:rgba(91,166,138,0.35); border:1px solid rgba(91,166,138,0.6); }
-  .tri-legend .l2::before{ background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); }
-  .tri-legend .l3::before{ background:var(--gold); }
-
-  /* snippet A vs B */
-  .ab-grid{ display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
-  @media (max-width:720px){ .ab-grid{ grid-template-columns:1fr; } }
-  .ab-col{ min-width:0; }
-  .ab-h{ font-family:var(--mono); font-size:0.66rem; letter-spacing:0.08em; text-transform:uppercase; color:var(--gold); margin-bottom:0.5rem; }
-  .ab-h span{ color:rgba(200,200,212,0.5); text-transform:none; letter-spacing:0.02em; }
-  pre.mini{ font-family:var(--mono); font-size:0.78rem; color:var(--text-bright); background:rgba(255,255,255,0.04); border:1px solid var(--border-ink); padding:0.7rem 0.9rem; line-height:1.6; overflow-x:auto; margin-bottom:0.7rem; }
-  pre.mini .k{ color:var(--steel); } pre.mini .n{ color:var(--amber); } pre.mini .z{ background:rgba(201,168,76,0.22); color:var(--gold); }
-  .tokstrip{ display:flex; flex-wrap:wrap; gap:0.25rem; margin-bottom:0.7rem; min-height:1.5rem; }
-  .tk{ font-family:var(--mono); font-size:0.62rem; padding:0.12rem 0.38rem; border:1px solid var(--border-ink); color:var(--text-on-ink); background:rgba(255,255,255,0.03); }
-  .tk.lay{ color:rgba(200,200,212,0.45); border-style:dashed; font-size:0.55rem; }
-  .tk.ded{ color:var(--ink); background:var(--gold); border:1px solid var(--gold); }
-  .ab-F{ font-family:var(--mono); font-size:0.68rem; color:var(--text-on-ink); margin-top:0.6rem; line-height:1.6; }
-  .ab-F b{ color:var(--gold); font-weight:500; }
-
-  /* pipeline figure */
-  .pipe-host{ overflow-x:auto; }
-  .pipe{ width:100%; min-width:560px; height:auto; display:block; }
-  .pipe .bx{ fill:rgba(255,255,255,0.035); stroke-width:1.1; }
-  .pipe .t{ font-family:var(--mono); font-size:10.5px; fill:var(--text-bright); text-anchor:middle; }
-  .pipe .h{ font-family:var(--mono); font-size:9px; letter-spacing:0.1em; text-anchor:middle; text-transform:uppercase; }
-  .pipe .ar{ fill:none; stroke-width:1.1; }
-
-  /* knowledge checks */
-  details.check{ background:var(--paper-white); border:1px solid var(--border-paper); border-left:3px solid var(--gold); padding:0.85rem 1.2rem; margin:0.8rem 0; }
-  details.check summary{ cursor:pointer; font-weight:600; color:var(--text-dark); font-size:0.94rem; list-style:none; display:flex; gap:0.7rem; align-items:baseline; }
-  details.check summary::-webkit-details-marker{ display:none; }
-  details.check summary::before{ content:'+'; font-family:var(--mono); color:var(--gold); font-weight:500; width:0.8rem; flex-shrink:0; }
-  details.check[open] summary::before{ content:'–'; }
-  details.check p{ margin:0.7rem 0 0 1.5rem; font-size:0.92rem; }
-
-  ul.refs{ list-style:none; margin:1rem 0 0; }
-  ul.refs li{ font-size:0.84rem; color:var(--text-mid); padding:0.45rem 0; border-bottom:1px solid var(--border-paper); line-height:1.55; }
-  ul.refs li:last-child{ border-bottom:none; }
-
-  /* ===== FOOTER ===== */
-  footer{ background:var(--ink); color:var(--text-on-ink); margin-top:3rem; }
-  .footer-inner{ max-width:var(--max-w); margin:0 auto; padding:2.6rem 2rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; }
-  .footer-left{ font-family:var(--serif); font-size:1.1rem; }
-  .footer-left span{ color:var(--gold); }
-  .footer-links{ display:flex; gap:1.3rem; }
-  .footer-links a{ font-size:0.8rem; color:var(--text-on-ink); opacity:0.6; }
-  .footer-links a:hover{ opacity:1; color:var(--gold); text-decoration:none; }
-  .footer-note{ max-width:var(--max-w); margin:0 auto; padding:0 2rem 1.6rem; font-family:var(--mono); font-size:0.62rem; color:rgba(200,200,212,0.3); }
-
-  @media (max-width:640px){
-    .hero h1{ font-size:2.1rem; }
-    .hero-dek{ font-size:1.05rem; }
-    .hero-tree{ display:none; }
-    .content{ padding:0 1.2rem; }
-    .topbar-inner{ padding:0 1.2rem; }
-    .hero-inner{ padding:0 1.2rem; }
-    .lab{ padding:1.3rem 1rem 1.5rem; }
-    .pp-row{ grid-template-columns:1fr; gap:0.2rem; }
-  }
-  @media (prefers-reduced-motion: reduce){
-    *{ animation:none !important; transition:none !important; }
-    html{ scroll-behavior:auto; }
-  }
-</style>
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 640px) {
+      .hero h1 { font-size: 2.8rem; }
+      .hero-tagline { font-size: 1.2rem; }
+      .projects-grid { grid-template-columns: 1fr; }
+      .content { padding: 0 1.2rem; }
+      .sticky-nav-inner { padding: 0.7rem 1.2rem; }
+      .sticky-nav-links { gap: 1rem; }
+      .section-number { font-size: 1.6rem; }
+      .section-title { font-size: 1.3rem; }
+      .news-item { grid-template-columns: 1fr; gap: 0.1rem; }
+      .footer-inner { flex-direction: column; text-align: center; }
+      .edu-block { flex-direction: column; gap: 0.6rem; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+      .reveal { opacity: 1; transform: none; }
+    }
+  </style>
 </head>
 <body>
 
-<div class="topbar">
-  <div class="topbar-inner">
-    <div class="topbar-name">Aakash <span>Vanmali</span></div>
-    <div class="topbar-links">
-      <a href="index.html">Writing</a>
-      <a href="../index.html">Portfolio</a>
-    </div>
-  </div>
-</div>
-
-<div class="hero">
-  <div class="hero-inner">
-    <div class="hero-eyebrow">Notebook · Code Representation · Part 1</div>
-    <h1>Teaching a Transformer to See Trees</h1>
-    <p class="hero-dek">Study notes on tree positional encoding — why a flat sequence loses the shape of code, and how Peng et al. (2022) give every syntax-tree node a coordinate the attention layer can read.</p>
-    <div class="hero-meta">AST · Tree positions · 2D coordinates · Global &amp; local bias · Disentangled attention</div>
-  </div>
-  <svg class="hero-tree" viewBox="0 0 210 150" aria-hidden="true">
-    <line x1="105" y1="16" x2="105" y2="48"/>
-    <line x1="105" y1="48" x2="55" y2="88"/><line x1="105" y1="48" x2="155" y2="88"/>
-    <line x1="55" y1="88" x2="25" y2="128"/><line x1="55" y1="88" x2="85" y2="128"/><line x1="155" y1="88" x2="155" y2="128"/>
-    <circle class="v" cx="105" cy="16" r="9"/>
-    <circle cx="105" cy="48" r="9"/><circle cx="55" cy="88" r="9"/><circle cx="155" cy="88" r="9"/>
-    <circle cx="25" cy="128" r="9"/><circle cx="85" cy="128" r="9"/><circle cx="155" cy="128" r="9"/>
-    <text x="105" y="34">(1,1)</text><text x="70" y="72">(1,2)</text><text x="142" y="72">(2,2)</text>
-    <text x="28" y="111">(1,2)</text><text x="84" y="111">(2,2)</text><text x="172" y="111">(1,1)</text>
-  </svg>
-</div>
-
-<div class="content">
-  <article>
-
-    <p class="lead">It started with one sentence in a paper, something like: <em>we replace sequential positional embeddings with AST-derived positional encodings.</em> I knew Transformers had a thing called positional encoding, and that it had to do with order. That was the whole of it. What's an AST? Why throw away a perfectly good position embedding? What does a tree have to do with attention?</p>
-
-    <p>These are my notes from working through it properly: <a href="https://aclanthology.org/2022.emnlp-main.210" target="_blank">Rethinking Positional Encoding in Tree Transformer for Code Representation</a> by Peng, Li, Zhao and Jin (EMNLP 2022), read from the ground up. I kept hitting walls, and every wall turned out to be a missing foundation. So the notes follow the order I had to rebuild them in — five stages, each one answering the question the last one left me with. Four small labs sit along the way; the tree builder in Stage 2 is the one to play with first.</p>
-
-    <ol class="route">
-      <li><span>01</span>Why a Transformer has to be told where things are</li>
-      <li><span>02</span>What an abstract syntax tree is, and how code becomes one</li>
-      <li><span>03</span>What a flat position throws away that a tree position keeps</li>
-      <li><span>04</span>Peng's recipe: a node's position as a list of 2D coordinates</li>
-      <li><span>05</span>How those coordinates reach the attention scores</li>
-    </ol>
-
-    <!-- ================= 01 ================= -->
-    <div class="section-header">
-      <span class="section-number">01</span>
-      <span class="section-title">Transformers can't tell who came first</span>
-      <span class="section-rule"></span>
-    </div>
-
-    <p>The first wall was the simplest one. Two sentences: <em>Dog bites man.</em> <em>Man bites dog.</em> Same three words, very different news. Any child learns early that order carries meaning.</p>
-
-    <p>Self-attention doesn't get that for free. Every token builds its query, key and value from its own embedding, then compares itself against every other token. Nothing in that computation says which token was first. Shuffle the input and you get exactly the same outputs, shuffled the same way — the property is called <strong>permutation equivariance</strong>. To a bare attention layer, both sentences are the same bag of words.</p>
-
-    <div class="fig">
-      <div class="bag-row"><span class="w">Dog</span><span class="w">bites</span><span class="w">man</span><span class="arrow">──▶</span><span class="bag">{ bites, dog, man }</span></div>
-      <div class="bag-row"><span class="w">Man</span><span class="w">bites</span><span class="w">dog</span><span class="arrow">──▶</span><span class="bag">{ bites, dog, man }</span></div>
-      <div class="fig-cap">Without positions, self-attention receives the same set of vectors for both sentences. Whatever it computes for "dog" is the same in both.</div>
-    </div>
-
-    <p>The original Transformer (Vaswani et al., 2017) fixed this by adding a <strong>positional encoding</strong> to every token: a vector that means "I am at position <em>k</em>".</p>
-
-    <div class="formula-block"><span class="name">Sequential positional encoding</span>input(k) = token_embedding(k) + position_embedding(k)<span class="sub">A token at position 0 gets the "position 0" vector added; the one at position 1 gets the "position 1" vector, and so on.</span></div>
-
-    <p>Now "dog at position 0" and "dog at position 2" are different inputs, and the model can learn that subjects tend to come first. For natural language, that's most of what you need.</p>
-
-    <h3 class="sub">Then code shows up</h3>
-
-    <div class="codeblk"><span class="k">if</span> x &gt; <span class="n">0</span>:
-    y = x + <span class="n">1</span>
-<span class="k">else</span>:
-    y = <span class="n">0</span></div>
-
-    <p>As text, this has an order: token 1, token 2, token 3. But its meaning lives in its structure. The <code>if</code> owns a condition, a then-branch and an else-branch. <code>y = x + 1</code> lives inside the then-branch. The two assignments to <code>y</code> are alternatives, not a sequence. "I am token #7" says none of that — not which branch you're in, not whose child you are, not how deep you're nested.</p>
-
-    <div class="callout gold"><strong>The idea in one sentence.</strong> A vanilla Transformer sees code as a flat string. A tree-position Transformer gives each node of the code's syntax tree a position that describes where it sits in that tree.</div>
-
-    <!-- ================= 02 ================= -->
-    <div class="section-header">
-      <span class="section-number">02</span>
-      <span class="section-title">Code is a tree before it's a string</span>
-      <span class="section-rule"></span>
-    </div>
-
-    <p>The next wall: the paper assumes you know what an AST is. I didn't, not really. When Python — or any compiler — reads your code, the first thing it does is parse it into a tree that captures its grammar. That's the <strong>abstract syntax tree</strong>. "Abstract" because it drops the cosmetic parts (colons, brackets, whitespace) and keeps only the structure. Here's <code>x = a + b</code>:</p>
-
-    <div class="lab" style="padding-bottom:1.3rem;">
-      <div class="lab-head">
-        <div class="lab-title"><span class="dot"></span> x = a + b, as a tree</div>
-        <div class="lab-sub">steel = inner node · teal = leaf · gold = root</div>
+  <nav class="sticky-nav" id="stickyNav">
+    <div class="sticky-nav-inner">
+      <a href="#" class="sticky-nav-name">Aakash Vanmali</a>
+      <div class="sticky-nav-links">
+        <a href="#research">Research</a>
+        <a href="#experience">Experience</a>
+        <a href="#projects">Projects</a>
+        <a href="blog/index.html">Writing</a>
       </div>
-      <div class="tree-host" id="figAst1"></div>
+    </div>
+  </nav>
+
+  <section class="hero">
+    <canvas class="hero-canvas" id="clusterCanvas"></canvas>
+    <div class="hero-content">
+      <div class="hero-eyebrow">AI &amp; Computer Vision Research</div>
+      <h1>Aakash<br>Vanmali</h1>
+      <p class="hero-tagline">Building intelligent perception for the real world</p>
+      <p class="hero-affiliation">
+        M.Eng. Mechatronics &amp; Cyber-Physical Systems · Technische Hochschule Deggendorf<br>
+        Master's Thesis at ABB AG, Mannheim
+      </p>
+      <div class="hero-links">
+        <a href="mailto:vanmaliaakash5@gmail.com">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 4L12 13 2 4"/></svg>
+          Email
+        </a>
+        <a href="https://github.com/aakashvanmali45" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+          GitHub
+        </a>
+        <a href="https://linkedin.com/in/aakashvanmali" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+          LinkedIn
+        </a>
+      </div>
+      <div class="hero-quote" id="heroQuote">
+        <p>"You can't connect the dots looking forward; you can only connect them looking backwards."</p>
+        <span>— Steve Jobs</span>
+      </div>
+    </div>
+    <div class="scroll-hint">
+      <span>Scroll</span>
+      <div class="scroll-line"></div>
+    </div>
+  </section>
+
+  <div class="content">
+
+    <div class="seeking-banner reveal" style="margin-top: 3rem;">
+      <span class="seeking-icon"></span>
+      <p><strong>Seeking fulltime opportunities</strong> in AI, Computer Vision, and Robotics across Europe and the Nordics.</p>
     </div>
 
-    <div class="callout"><strong>A note on drawing.</strong> To keep the trees readable I fold operators into their parent's label (<code>BinOp +</code> rather than a separate <code>Add</code> child), and I drop Python's outer <code>Module</code> wrapper for one-line examples in the prose. Python's own <code>ast</code> module keeps both. The lab below keeps <code>Module</code>, because real files have more than one statement. Every tree in these notes uses the same conventions, so the numbers always line up.</div>
-
-    <p>Every tree paper leans on the same small vocabulary, so I wrote it down once against this example:</p>
-
-    <div class="table-wrap"><table>
-      <thead><tr><th>Term</th><th>Meaning</th><th>In <code>x = a + b</code></th></tr></thead>
-      <tbody>
-        <tr><td class="metric-name">Root</td><td>The top node; it has no parent</td><td>Assign</td></tr>
-        <tr><td class="metric-name">Parent / child</td><td>Directly above / directly below</td><td>Assign is the parent of Name x and BinOp +</td></tr>
-        <tr><td class="metric-name">Siblings</td><td>Nodes that share a parent</td><td>Name a and Name b</td></tr>
-        <tr><td class="metric-name">Sibling order</td><td>Left-to-right number among siblings</td><td>Name x is 1, BinOp + is 2</td></tr>
-        <tr><td class="metric-name">Parent's child count</td><td>How many children the parent has</td><td>Assign has 2</td></tr>
-        <tr><td class="metric-name">Depth</td><td>Levels from the top, counting the root as 1</td><td>Name a is at depth 3</td></tr>
-        <tr><td class="metric-name">Leaf</td><td>A node with no children</td><td>Name x, Name a, Name b</td></tr>
-      </tbody>
-    </table></div>
-
-    <p>One convention to pin down now, because it trips up the formulas later: I count the root as <strong>depth 1</strong>. That's the convention under which a node's position list in Stage 4 has exactly as many entries as its depth.</p>
-
-    <p>Each node carries two pieces of information. Its <strong>type</strong> says what kind of syntax it is — Assign, BinOp, Name, If, Call. Its <strong>value</strong> is the literal text, when there is one — <code>x</code>, <code>a</code>, <code>0</code>. Structural nodes like Assign have no text of their own, so the paper gives them a placeholder value, <code>&lt;empty&gt;</code>. What the model actually receives for each node is the sum of the two embeddings:</p>
-
-    <div class="formula-block"><span class="name">Node input</span>xᵢ = type_embedding(Assign) + value_embedding(&lt;empty&gt;)</div>
-
-    <h3 class="sub">Flattening the tree</h3>
-
-    <p>A Transformer eats sequences, not trees, so the tree gets <strong>linearized</strong>. The standard choice — and the one the paper uses for every model it compares — is <strong>depth-first order</strong>: visit a node, then each of its children left to right, recursively. For <code>x = a + b</code> that gives Assign, Name x, BinOp +, Name a, Name b.</p>
-
-    <p>And here's the catch the rest of these notes are about: once you flatten, the shape is gone. The sequence says BinOp + comes third. It doesn't say that Name a and Name b belong to it. You can watch this happen below — the chips under the tree are the sequence the Transformer actually gets, appearing in the order it reads them.</p>
-
-    <!-- LAB 1: AST PLAYGROUND -->
-    <div class="lab" id="astLab">
-      <div class="lab-head">
-        <div class="lab-title"><span class="dot"></span> AST lab — watch code become a tree</div>
-        <div class="lab-sub">pick an example or type your own</div>
+    <section class="reveal">
+      <div class="section-header">
+        <span class="section-number">01</span>
+        <span class="section-title">News</span>
+        <span class="section-rule"></span>
       </div>
-      <div class="lab-btns" id="presetBtns"></div>
-      <textarea id="codeIn" spellcheck="false" aria-label="Python code to parse"></textarea>
-      <div class="lab-status" id="astStatus"></div>
-      <div class="lab-btns">
-        <button class="lab-btn on" id="btnBuild">Build tree</button>
-        <button class="lab-btn ghost" id="btnInstant">Show instantly</button>
-        <button class="lab-btn ghost" id="btnToExplorer">Open in the position explorer ↓</button>
+      <div class="news-item">
+        <span class="news-date">Jul 2026</span>
+        <span class="news-text">Completed master's thesis at ABB AG on clustering-based approaches for industrial document digitisation.</span>
       </div>
-      <div class="tree-host" id="astTree"></div>
-      <div class="seq-label">Depth-first sequence fed to the Transformer</div>
-      <div class="seq" id="astSeq"></div>
-      <div class="lab-info" id="astInfo">Click any node to see its family details. The numbers will make sense in Stage 4.</div>
-      <div class="lab-hint">Understands a teaching subset of Python: assignments, + - * / % ** comparisons, and / or / not, calls, attributes, lists, if / elif / else, for, while, def, return.</div>
-    </div>
-
-    <p>Try the third example and watch the order the nodes arrive in. The function's whole loop body shows up before <code>return s</code>, because depth-first goes all the way down one branch before it moves to the next. Notice too how unevenly the tree branches: <code>For</code> has three children, <code>If</code> has two, <code>Return</code> has one. That unevenness will matter in Stage 4.</p>
-
-    <h3 class="sub">One trick: the virtual node</h3>
-
-    <p>The root has no parent, which is awkward for a formula that describes every node relative to its parent. The paper's fix is a classic from algorithms textbooks: add a <strong>virtual node</strong> above the root. It isn't code; it's scaffolding. The root becomes child 1 of 1 of the virtual node, and now every real node has a parent. You'll see it drawn dashed in the Stage 4 explorer.</p>
-
-    <div class="callout gold"><strong>Stage 2 in five lines.</strong> Code parses into an AST. Nodes have a type and sometimes a value. Sibling order and the parent's child count say where a node sits among its siblings; depth says how far down it is. A Transformer receives a flattened, depth-first sequence. Tree positional encoding is how the shape gets put back.</div>
-
-    <!-- ================= 03 ================= -->
-    <div class="section-header">
-      <span class="section-number">03</span>
-      <span class="section-title">What a flat position throws away</span>
-      <span class="section-rule"></span>
-    </div>
-
-    <p>With trees in hand, I could finally put the two ideas of "position" side by side. Take <code>a = b + c</code>. A standard Transformer tokenizes it and labels each token with its index:</p>
-
-    <div class="table-wrap"><table>
-      <thead><tr><th>Token</th><th>a</th><th>=</th><th>b</th><th>+</th><th>c</th></tr></thead>
-      <tbody><tr><td class="metric-name">Sequential position</td><td class="mono">0</td><td class="mono">1</td><td class="mono">2</td><td class="mono">3</td><td class="mono">4</td></tr></tbody>
-    </table></div>
-
-    <p>That tells the model about order and about distance in the text. It says nothing about who belongs to whom. The tree-position Transformer also receives a flattened sequence — Assign, Name a, BinOp +, Name b, Name c — but every node carries extra information about where it sits:</p>
-
-    <div class="table-wrap"><table>
-      <thead><tr><th>Node</th><th>Sibling order</th><th>Parent's child count</th><th>Depth</th></tr></thead>
-      <tbody>
-        <tr><td class="metric-name">Assign</td><td class="mono">1</td><td class="mono">1 <span style="color:var(--text-light)">(virtual node)</span></td><td class="mono">1</td></tr>
-        <tr><td class="metric-name">Name a</td><td class="mono">1</td><td class="mono">2</td><td class="mono">2</td></tr>
-        <tr><td class="metric-name">BinOp +</td><td class="mono">2</td><td class="mono">2</td><td class="mono">2</td></tr>
-        <tr><td class="metric-name">Name b</td><td class="mono">1</td><td class="mono">2</td><td class="mono">3</td></tr>
-        <tr><td class="metric-name">Name c</td><td class="mono">2</td><td class="mono">2</td><td class="mono">3</td></tr>
-      </tbody>
-    </table></div>
-
-    <p>Read across and the structure falls out. Name a and BinOp + are siblings under Assign. Name b and Name c are siblings one level deeper. Name a is the first child, BinOp + the second. None of that lives in a column of plain indices.</p>
-
-    <h3 class="sub">The pair of snippets that convinced me</h3>
-
-    <p>This is where it stopped being abstract. In snippet A below, <code>z = 2</code> runs after the <code>if</code>, always. In snippet B, it runs only when <code>x</code> is truthy. Two different programs, one indentation apart.</p>
-
-    <p>Now look at them as tokens. Strip the whitespace — many code tokenizers fold indentation into other tokens or drop it — and the two streams are identical: <code>if x : y = 1 z = 2</code>. Python's own tokenizer does keep a trace: it emits <code>INDENT</code> and <code>DEDENT</code> markers, and the only difference between A and B is where a single <code>DEDENT</code> lands. Toggle the layout tokens to see it.</p>
-
-    <!-- LAB 2: SNIPPET A vs B -->
-    <div class="lab" id="abLab">
-      <div class="lab-head">
-        <div class="lab-title"><span class="dot"></span> Same tokens, different trees</div>
-        <div class="lab-sub">z = 2 is highlighted in both</div>
+      <div class="news-item">
+        <span class="news-date">2026</span>
+        <span class="news-text">Actively seeking PhD positions in AI, Computer Vision, and Robotics across Europe and the Nordics.</span>
       </div>
-      <div class="lab-btns">
-        <button class="lab-btn" id="btnLayout" aria-pressed="false">Show layout tokens (NEWLINE · INDENT · DEDENT)</button>
+    </section>
+
+    <section id="research" class="reveal">
+      <div class="section-header">
+        <span class="section-number">02</span>
+        <span class="section-title">Research Interests</span>
+        <span class="section-rule"></span>
       </div>
-      <div class="ab-grid">
-        <div class="ab-col">
-          <div class="ab-h">Snippet A <span>— z after the if</span></div>
-          <pre class="mini"><span class="k">if</span> x:
-    y = <span class="n">1</span>
-<span class="z">z = <span class="n">2</span></span></pre>
-          <div class="tokstrip" id="tokA"></div>
-          <div class="tree-host" id="treeA"></div>
-          <div class="ab-F" id="fA"></div>
+      <p class="research-statement">
+        I am interested in developing <strong>Vision-Language Models (VLMs)</strong> and <strong>Vision-Language-Action (VLA) systems</strong> for robotics, industrial automation, and medical applications. My research also explores unsupervised, semi-supervised, and zero-shot learning to build robust AI systems that learn with minimal labeled data. I am seeking a PhD to advance intelligent perception and decision-making for real-world autonomous systems.
+      </p>
+      <div class="topics-wrap">
+        <span class="topic-pill">Zero-Shot Visual Understanding</span>
+        <span class="topic-pill">Vision-Language Models</span>
+        <span class="topic-pill">Label-Efficient Learning</span>
+        <span class="topic-pill">Novel Class Discovery</span>
+        <span class="topic-pill">Industrial Computer Vision</span>
+        <span class="topic-pill">Vision-Language-Action Models</span>
+        <span class="topic-pill">Robotic Perception</span>
+      </div>
+    </section>
+
+    <section id="experience" class="reveal">
+      <div class="section-header">
+        <span class="section-number">03</span>
+        <span class="section-title">Research &amp; Industry Experience</span>
+        <span class="section-rule"></span>
+      </div>
+      <div class="exp-timeline">
+        <div class="exp-entry">
+          <div class="exp-top">
+            <span class="exp-role">Master's Thesis Researcher</span>
+            <span class="exp-dates">2025 – 2026</span>
+          </div>
+          <div class="exp-org">ABB AG, Mannheim, Germany</div>
+          <p class="exp-desc">Developed a clustering-based human-in-the-loop verification pipeline for industrial document digitisation. Investigated label-efficient approaches to symbol detection in P&amp;ID drawings. Designed and evaluated vision-language model pipelines for industrial inspection use cases.</p>
         </div>
-        <div class="ab-col">
-          <div class="ab-h">Snippet B <span>— z inside the if</span></div>
-          <pre class="mini"><span class="k">if</span> x:
-    y = <span class="n">1</span>
-    <span class="z">z = <span class="n">2</span></span></pre>
-          <div class="tokstrip" id="tokB"></div>
-          <div class="tree-host" id="treeB"></div>
-          <div class="ab-F" id="fB"></div>
+        <div class="exp-entry">
+          <div class="exp-top">
+            <span class="exp-role">Computer Vision Intern (PoC)</span>
+            <span class="exp-dates">2023</span>
+          </div>
+          <div class="exp-org">JSW Steel Ltd., India</div>
+          <p class="exp-desc">Built proof-of-concept systems for flame volume measurement and pellet counting using classical and deep learning-based computer vision. Scoped as PoC — demonstrated technical feasibility for production evaluation.</p>
         </div>
       </div>
-    </div>
+    </section>
 
-    <p>One invisible token carries the whole change in meaning — a weak signal for a model to pick up from sequential positions alone. The trees leave no doubt. In A, the assignment to <code>z</code> is a sibling of the <code>If</code>: the second statement of the module, at depth 2. In B, it sits inside the <code>If</code>'s <code>body</code>, at depth 4. The position lists printed under each tree differ in both length and content. We'll decode that notation in Stage 4.</p>
-
-    <h3 class="sub">Two ways to use a tree position</h3>
-
-    <p>The paper uses tree positions in two complementary ways, and the difference ended up mattering a lot:</p>
-
-    <div class="callout gold"><strong>Global (absolute).</strong> Every node gets one position vector — a GPS coordinate in the tree. Any two nodes can compare coordinates, whether they're neighbours or on opposite sides of the tree.</div>
-    <div class="callout teal"><strong>Local (relative).</strong> Only nodes joined by an edge — a parent and its child — get a relation vector, which says "these two are adjacent, and here is which one is the parent."</div>
-
-    <p>Stage 5 is where both get built. For now, the summary I kept on a sticky note:</p>
-
-    <div class="table-wrap"><table>
-      <thead><tr><th>Aspect</th><th>Sequential position</th><th>Tree position</th></tr></thead>
-      <tbody>
-        <tr><td class="metric-name">Based on</td><td>Token index in the flat string</td><td>Node location in the AST</td></tr>
-        <tr><td class="metric-name">Captures</td><td>Order, distance in text</td><td>Parent, child, sibling, depth</td></tr>
-        <tr><td class="metric-name">Good for</td><td>Natural language</td><td>Code syntax</td></tr>
-        <tr><td class="metric-name">Blind to</td><td>Tree structure</td><td>Raw token order (unless added back)</td></tr>
-        <tr><td class="metric-name">Example signal</td><td>"I am token 7"</td><td>"I am child 2 of 3, at depth 4"</td></tr>
-      </tbody>
-    </table></div>
-
-    <h3 class="sub">Inductive bias, in one paragraph</h3>
-
-    <p>An <strong>inductive bias</strong> is an assumption built into a model that helps it learn. A CNN assumes nearby pixels are related, which is why it slides small filters around. A tree Transformer assumes code nodes are related through the tree. Tree positional encoding hands that assumption to a Transformer that would otherwise see a flat sequence — and hands it over as a <em>soft</em> bias. Every node can still attend to every other node; the tree only nudges the scores.</p>
-
-    <!-- ================= 04 ================= -->
-    <div class="section-header">
-      <span class="section-number">04</span>
-      <span class="section-title">Peng's recipe: positions as lists of 2D coordinates</span>
-      <span class="section-rule"></span>
-    </div>
-
-    <p>This is the technical heart of the paper, and the part I read most slowly. The idea fits in one breath: describe each node by the path from the root down to it, and at every step along the path, write down two numbers.</p>
-
-    <div class="formula-block"><span class="name">Eq. 1 — the 2D recursive description</span>F(x) = F(f(x)) + {(xᵢ, xⱼ)}&nbsp;&nbsp;&nbsp;<span class="case">if x ≠ root</span>
-<br>F(x) = {(1, 1)}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="case">if x = root</span><span class="sub">Here "+" means "append to the list".</span></div>
-
-    <div class="table-wrap"><table>
-      <thead><tr><th>Symbol</th><th>Meaning</th></tr></thead>
-      <tbody>
-        <tr><td class="mono">F(x)</td><td>The position description of node x: a list of 2D coordinates</td></tr>
-        <tr><td class="mono">f(x)</td><td>The parent of x</td></tr>
-        <tr><td class="mono">F(f(x))</td><td>The parent's list — this is where the recursion lives</td></tr>
-        <tr><td class="mono">xᵢ</td><td>The sibling order of x: is it the 1st, 2nd, … child?</td></tr>
-        <tr><td class="mono">xⱼ</td><td>The total number of children of x's parent</td></tr>
-      </tbody>
-    </table></div>
-
-    <p>So each coordinate reads as a short sentence: <em>I am child xᵢ of xⱼ.</em> A node inherits its parent's list and appends one sentence about itself. The root, thanks to the virtual node, is child 1 of 1, so F(root) = {(1, 1)}.</p>
-
-    <h3 class="sub">Working it by hand</h3>
-
-    <p>This only clicked for me once I computed it. Below is a small tree with the virtual node on top. Click each node and check the working: the path from the root lights up, and the coordinates appear one per level. Then switch to the tree you built in the AST lab and try a deep node.</p>
-
-    <!-- LAB 3: POSITION EXPLORER -->
-    <div class="lab" id="exLab">
-      <div class="lab-head">
-        <div class="lab-title"><span class="dot"></span> Tree-position explorer</div>
-        <div class="lab-sub">click a node to compute F(x) and Hᵢ</div>
+    <section id="projects" class="reveal">
+      <div class="section-header">
+        <span class="section-number">04</span>
+        <span class="section-title">Selected Projects</span>
+        <span class="section-rule"></span>
       </div>
-      <div class="lab-btns">
-        <span class="lab-label">Tree</span>
-        <button class="lab-btn on" id="exSrcDemo">Example A–F</button>
-        <button class="lab-btn" id="exSrcLab">From the AST lab</button>
-      </div>
-      <div class="ex-grid">
-        <div class="tree-host" id="exTree" style="align-self:start;"></div>
-        <div class="pp" id="exPanel"></div>
-      </div>
-      <div class="lab-hint">The selected node's coordinates also light up in the 136-cell triangle further down.</div>
-    </div>
-
-    <div class="table-wrap"><table>
-      <thead><tr><th>Node</th><th>Position list F(x)</th><th>Depth</th></tr></thead>
-      <tbody>
-        <tr><td class="metric-name">A</td><td class="mono">{(1,1)}</td><td class="mono">1</td></tr>
-        <tr><td class="metric-name">B</td><td class="mono">{(1,1), (1,2)}</td><td class="mono">2</td></tr>
-        <tr><td class="metric-name">C</td><td class="mono">{(1,1), (2,2)}</td><td class="mono">2</td></tr>
-        <tr><td class="metric-name">D</td><td class="mono">{(1,1), (1,2), (1,2)}</td><td class="mono">3</td></tr>
-        <tr><td class="metric-name">E</td><td class="mono">{(1,1), (1,2), (2,2)}</td><td class="mono">3</td></tr>
-        <tr><td class="metric-name">F</td><td class="mono">{(1,1), (2,2), (1,1)}</td><td class="mono">3</td></tr>
-      </tbody>
-    </table></div>
-
-    <p>Two patterns jump out. The length of a list is the node's depth. And a list reads like directions from the root: the last coordinate describes the node's relationship to its own parent, and everything before it is the parent's address.</p>
-
-    <h3 class="sub">Why "lossless" is the right word</h3>
-
-    <p>The paper makes a point I underrated on first read: a good description of a structure should be <strong>lossless</strong>. From the description alone, you should be able to rebuild the original exactly. Given every node's list, you can. A list minus its last coordinate is the parent's list. The last coordinate says which child the node is and how many siblings it has. Parents, children, their order and every branching factor are all recoverable.</p>
-
-    <p>Compare the earlier tree Transformer of Shiv &amp; Quirk (2019), which recorded only sibling orders along the path: <span style="font-family:var(--mono);font-size:0.88em">(1, 2, 1)</span> rather than <span style="font-family:var(--mono);font-size:0.88em">{(1,2), (2,3), (1,1)}</span>. That works neatly for regular trees, where every node has the same number of children. ASTs aren't regular — an <code>If</code> has two or three children, a <code>Call</code> has as many as it has arguments. Without the second number, "first child" can't tell an only child from the first of five. The ablations back this up. On Python code completion, overall accuracy fell from 63.2% to 59.4% without the sibling order, and to 62.0% without the child count.</p>
-
-    <h3 class="sub">From coordinates to vectors</h3>
-
-    <p>Each coordinate becomes a vector through an embedding table, the same way a word does. The paper tried two options: mapping the pair to a single table index, or embedding each number separately and combining them. It found no real difference and kept the single-index version. For node i, that gives a sequence of vectors:</p>
-
-    <div class="formula-block"><span class="name">Eq. 2 — the vector sequence of node i</span>Hᵢ = [ h(i<sup>1</sup>), h(i<sup>2</sup>), …, h(i<sup>n</sup>) ]<span class="sub">n = depth of node i · h(i<sup>k</sup>) = the vector for the k-th coordinate in F(i)</span></div>
-
-    <div class="question">
-      <div class="q-label">The question I got stuck on · 1</div>
-      <div class="q-text">Where does 16 × 17 / 2 = 136 come from?</div>
-    </div>
-
-    <p>The paper caps the number of children at 16, so both numbers in a coordinate run from 1 to 16. My first instinct was 16 × 16 = 256 table entries. But almost half of those pairs are impossible: you can't be the 5th child of a parent with 3 children. The constraint is <strong>xᵢ ≤ xⱼ</strong>.</p>
-
-    <p>So count the valid pairs column by column. One pair when the parent has 1 child, two when it has 2, and so on up to sixteen when it has 16. That's 1 + 2 + … + 16, a triangle number: 16 × 17 / 2 = 136. The grid below is that triangle. Hover a cell, drag the cap, and select a node in the explorer above to see which cells its coordinates use.</p>
-
-    <!-- LAB 4: TRIANGLE -->
-    <div class="lab" id="triLab">
-      <div class="lab-head">
-        <div class="lab-title"><span class="dot"></span> The 136-entry coordinate table</div>
-        <div class="lab-sub">hover or tap a cell</div>
-      </div>
-      <div class="tri-wrap">
-        <div class="tri-axis y">↓ sibling order xᵢ</div>
-        <div class="tri" id="tri" role="grid" aria-label="Valid coordinate pairs"></div>
-        <div class="tri-axis">parent's child count xⱼ →</div>
-        <div class="tri-legend"><span class="l1">valid (xᵢ ≤ xⱼ)</span><span class="l2">impossible or above the cap</span><span class="l3">used by the explorer's node</span></div>
-        <div class="tri-ctrl">
-          <div class="tri-count" id="triCount">136<small>table entries</small></div>
-          <label class="lab-label" for="triCap">max children</label>
-          <input type="range" id="triCap" min="1" max="16" value="16">
-          <span class="lab-label" id="triCapVal" style="color:var(--gold)">16</span>
+      <div class="projects-grid">
+        <div class="proj-card">
+          <span class="proj-arrow">↗</span>
+          <div class="proj-name"><a href="https://github.com/aakashvanmali45/autonomous_robot_object_identification" target="_blank">Autonomous Robot with IR Object ID</a></div>
+          <p class="proj-desc">Chain-wheeled mobile robot using IR camera for real-time object identification. ROS 2 + Gazebo perception and control pipelines.</p>
+          <div class="proj-stack">Python · ROS 2 · Gazebo · Computer Vision</div>
+        </div>
+        <div class="proj-card">
+          <span class="proj-arrow">↗</span>
+          <div class="proj-name"><a href="https://github.com/aakashvanmali45/robot_path_planning_Astar_RRT" target="_blank">A* vs. RRT Path Planning</a></div>
+          <p class="proj-desc">Quantitative comparison of search-based and sampling-based path planning for robotic navigation in 2D environments.</p>
+          <div class="proj-stack">MATLAB · Path Planning · Robotics</div>
+        </div>
+        <div class="proj-card">
+          <span class="proj-arrow">↗</span>
+          <div class="proj-name"><a href="https://github.com/aakashvanmali45/AI-Based-PID-Controller" target="_blank">AI-Optimised PID Controller</a></div>
+          <p class="proj-desc">PID controller with AI-based optimisation for precise temperature control in an industrial furnace simulation.</p>
+          <div class="proj-stack">MATLAB · Simulink · Control Systems</div>
+        </div>
+        <div class="proj-card">
+          <span class="proj-arrow">↗</span>
+          <div class="proj-name"><a href="https://github.com/aakashvanmali45/llms-from-scratch" target="_blank">LLMs from Scratch</a></div>
+          <p class="proj-desc">Ground-up implementation of LLM architectures — tokenisation, attention mechanisms, and training loops.</p>
+          <div class="proj-stack">Python · Transformers · Deep Learning</div>
         </div>
       </div>
-      <div class="lab-info" id="triInfo">Each lit cell is one row in the embedding table. The empty half below the diagonal is every pair where a node would be "child 5 of 3".</div>
-    </div>
+    </section>
 
-    <p>Two practical details. Anything past the cap is clamped, so the 20th argument of a 25-argument call is stored as (16, 16). And with 32-dimensional coordinate vectors, the whole table is 136 × 32 ≈ 4,400 parameters — tiny. All of the paper's positional machinery together adds about 1.3M parameters, mostly projection matrices, which is small next to the 6-layer, 512-wide Transformer it sits in.</p>
-
-    <div class="question">
-      <div class="q-label">The question I got stuck on · 2</div>
-      <div class="q-text">Is Hᵢ per node or per tree — and doesn't its size keep changing?</div>
-    </div>
-
-    <p>Per node. Every node gets its own Hᵢ. And yes, its length changes, because it equals the node's depth: the root's Hᵢ holds one vector, a node at depth 10 holds ten.</p>
-
-    <p>That's a problem for a linear layer, which wants a fixed-size input. The fix is mundane. Pick a maximum depth (16 in most of the paper's settings), pad short lists with zero vectors, and cut long lists down to their first 16 entries. Then concatenate. A depth-3 node becomes 3 real vectors plus 13 zeros; at 32 dimensions each, every node ends up as a 16 × 32 = 512-number vector. That's the row of 16 slots in the explorer.</p>
-
-    <div class="table-wrap"><table>
-      <thead><tr><th>Question</th><th>Answer</th></tr></thead>
-      <tbody>
-        <tr><td class="metric-name">Is Hᵢ per node?</td><td>Yes — every node has its own</td></tr>
-        <tr><td class="metric-name">One Hᵢ for the whole tree?</td><td>No</td></tr>
-        <tr><td class="metric-name">Does its length vary?</td><td>Yes — it equals the node's depth</td></tr>
-        <tr><td class="metric-name">How is that handled?</td><td>Zero-pad (or truncate) to max depth, then concatenate</td></tr>
-        <tr><td class="metric-name">What comes out?</td><td>A fixed-size vector per node, ready for Stage 5</td></tr>
-      </tbody>
-    </table></div>
-
-    <!-- ================= 05 ================= -->
-    <div class="section-header">
-      <span class="section-number">05</span>
-      <span class="section-title">Getting the tree into attention</span>
-      <span class="section-rule"></span>
-    </div>
-
-    <p>Stage 4 left every node holding Hᵢ. Stage 5 is the part I'd originally skimmed: how those vectors actually change what the model attends to. There are two routes, global and local, and both end up as extra terms added to the attention score. First, the score they're added to:</p>
-
-    <div class="formula-block"><span class="name">Content attention</span>αᵢⱼ = (xᵢW<sup>Q</sup>)(xⱼW<sup>K</sup>)<sup>T</sup><span class="sub">Plain self-attention between node i and node j, from their type + value embeddings.</span></div>
-
-    <h3 class="sub">Global: one absolute vector per node</h3>
-
-    <div class="formula-block"><span class="name">Eq. 6 — absolute tree position</span>aᵢ = LN( Linear( Concat(Hᵢ) ) )</div>
-
-    <p>Pad or truncate Hᵢ to 16 entries, concatenate them into 512 numbers, project to the model's hidden size with a linear layer, and normalize. The result, aᵢ, is the node's tree coordinate. It encodes the whole root-to-node path — every sibling order and child count along the way — and with it, the depth.</p>
-
-    <div class="formula-block"><span class="name">Eq. 8 — global position score</span>βᵢⱼ = (aᵢW<sub>a</sub><sup>Q</sup>)(aⱼW<sub>a</sub><sup>K</sup>)<sup>T</sup></div>
-
-    <p>βᵢⱼ is an attention score computed purely from where two nodes sit. Because each aᵢ is built from a full path, comparing two of them exposes the route between the nodes: how much path they share and where they branch apart. The paper is careful to say the model has the <em>potential</em> to capture these pairwise paths through the dot product. It isn't hard-wired; it's learned. This is the global bias — every pair of nodes gets one, near or far.</p>
-
-    <h3 class="sub">Local: a relation vector for each edge</h3>
-
-    <div class="formula-block"><span class="name">Eq. 7 — relative tree position</span>rᵢⱼ = LN( Linear( ΣHᵢ − ΣHⱼ ) )&nbsp;&nbsp;&nbsp;<span class="case">if j is i's parent, or i is j's parent</span>
-<br>rᵢⱼ = 0&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="case">otherwise</span></div>
-
-    <p>Only parent–child pairs get a non-zero vector; every other pair gets zero. The subtraction is the clever part. If j is the parent of i, then Hᵢ is just Hⱼ with one extra vector appended — the one for i's own coordinate. Sum both lists, subtract, and everything they share cancels:</p>
-
-    <div class="formula-block"><span class="name">Why the subtraction works</span>ΣHᵢ − ΣHⱼ = h(i<sup>n</sup>)<span class="sub">The embedding of i's last coordinate: (sibling order of i, child count of j).</span></div>
-
-    <p>So rᵢⱼ says, in effect, "i is child 2 of 3 of j." It says one more thing too, which I got wrong on my first pass.</p>
-
-    <div class="callout"><strong>The asymmetry is a sign flip.</strong> Swap the roles and the subtraction runs the other way: ΣHⱼ − ΣHᵢ = −h(i<sup>n</sup>). Same coordinate, opposite sign. So rᵢⱼ and rⱼᵢ start from mirror-image inputs, and that's how the model can tell which end of an edge is the parent. After the linear layer and normalization the two vectors aren't literally negatives of each other, but they begin from opposite sides.</div>
-
-    <p>The local vectors get their own linear and normalization layers, separate from the global ones. They enter attention like this:</p>
-
-    <div class="formula-block"><span class="name">Eq. 9 — local position score</span>γᵢⱼ = (xᵢW<sup>Q</sup>)(rᵢⱼW<sub>r</sub><sup>K</sup>)<sup>T</sup> + (rⱼᵢW<sub>r</sub><sup>Q</sup>)(xⱼW<sup>K</sup>)<sup>T</sup><span class="sub">First term: given i's content, how relevant is its structural relation to j? Second term: the mirror question, from j's side.</span></div>
-
-    <h3 class="sub">Why "disentangled"?</h3>
-
-    <p>The original Transformer adds position to content <em>before</em> attention, so a single projection has to serve both:</p>
-
-    <div class="formula-block"><span class="name">Mixed (vanilla)</span>((xᵢ + pᵢ)W<sup>Q</sup>) ((xⱼ + pⱼ)W<sup>K</sup>)<sup>T</sup><span class="sub">Expands into content·content + content·position + position·content + position·position, all forced through the same W<sup>Q</sup> and W<sup>K</sup>.</span></div>
-
-    <p>Disentangled attention keeps content and position as separate streams with their own projection matrices, and adds up the dot products. Ke et al. (2020) and DeBERTa (He et al., 2020) argued that pushing words and positions through the same projection is a poor fit. γᵢⱼ is DeBERTa's relative form; βᵢⱼ follows Ke et al.'s untied absolute form. Peng et al.'s contribution is carrying both over from sequence positions to tree positions.</p>
-
-    <h3 class="sub">Putting it together</h3>
-
-    <div class="formula-block"><span class="name">Eq. 10 — the full score</span>Aᵢⱼ = (1/√2) · (αᵢⱼ + βᵢⱼ + γᵢⱼ)
-<br>zᵢ = Σⱼ softmaxⱼ(Aᵢⱼ) · xⱼW<sup>V</sup></div>
-
-    <p>Four dot products feed Aᵢⱼ, yet the scale is 1/√2, not 1/√4. The paper's reasoning: γ is non-zero only for a node's handful of neighbours, so for almost every pair only α and β contribute. One thing worth knowing before implementing it: the paper leaves out the usual 1/√d factor to keep the equations readable. In code, you still divide by √d as well.</p>
-
-    <div class="lab">
-      <div class="lab-head">
-        <div class="lab-title"><span class="dot"></span> The whole pipeline</div>
-        <div class="lab-sub">three streams, one score</div>
+    <section class="reveal">
+      <div class="section-header">
+        <span class="section-number">05</span>
+        <span class="section-title">Education</span>
+        <span class="section-rule"></span>
       </div>
-      <div class="pipe-host">
-      <svg class="pipe" viewBox="0 0 700 380" role="img" aria-label="Pipeline: AST to coordinates to H, splitting into content, global and local streams, summed into the attention score">
-        <defs>
-          <marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="rgba(200,200,212,0.5)"/></marker>
-          <marker id="ahg" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#C9A84C"/></marker>
-          <marker id="aht" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#5BA68A"/></marker>
-          <marker id="ahs" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#6B8DAD"/></marker>
-        </defs>
-        <!-- top -->
-        <rect class="bx" x="200" y="8" width="300" height="38" stroke="rgba(200,200,212,0.35)"/>
-        <text class="t" x="350" y="31">AST  →  F(x)  →  Hᵢ for every node</text>
-        <!-- headers -->
-        <text class="h" x="120" y="88" fill="#6B8DAD">content</text>
-        <text class="h" x="350" y="88" fill="#C9A84C">global · absolute</text>
-        <text class="h" x="580" y="88" fill="#5BA68A">local · parent–child</text>
-        <!-- arrows from top -->
-        <path class="ar" d="M300,46 C300,66 120,60 120,74" stroke="rgba(107,141,173,0.6)" marker-end="url(#ahs)"/>
-        <path class="ar" d="M350,46 L350,74" stroke="rgba(201,168,76,0.7)" marker-end="url(#ahg)"/>
-        <path class="ar" d="M400,46 C400,66 580,60 580,74" stroke="rgba(91,166,138,0.7)" marker-end="url(#aht)"/>
-        <!-- content column -->
-        <rect class="bx" x="30" y="100" width="180" height="40" stroke="#6B8DAD"/>
-        <text class="t" x="120" y="124">xᵢ = type + value</text>
-        <path class="ar" d="M120,140 L120,218" stroke="rgba(107,141,173,0.6)" marker-end="url(#ahs)"/>
-        <rect class="bx" x="30" y="222" width="180" height="44" stroke="#6B8DAD"/>
-        <text class="t" x="120" y="249">αᵢⱼ = (xᵢW<tspan baseline-shift="super" font-size="7.5">Q</tspan>)(xⱼW<tspan baseline-shift="super" font-size="7.5">K</tspan>)<tspan baseline-shift="super" font-size="7.5">T</tspan></text>
-        <!-- global column -->
-        <rect class="bx" x="255" y="100" width="190" height="40" stroke="#C9A84C"/>
-        <text class="t" x="350" y="124">pad to 16 · Concat(Hᵢ)</text>
-        <path class="ar" d="M350,140 L350,157" stroke="rgba(201,168,76,0.7)" marker-end="url(#ahg)"/>
-        <rect class="bx" x="255" y="161" width="190" height="40" stroke="#C9A84C"/>
-        <text class="t" x="350" y="185">aᵢ = LN(Linear(·))</text>
-        <path class="ar" d="M350,201 L350,218" stroke="rgba(201,168,76,0.7)" marker-end="url(#ahg)"/>
-        <rect class="bx" x="255" y="222" width="190" height="44" stroke="#C9A84C"/>
-        <text class="t" x="350" y="249">βᵢⱼ = (aᵢW<tspan baseline-shift="sub" font-size="7.5">a</tspan><tspan baseline-shift="super" font-size="7.5">Q</tspan>)(aⱼW<tspan baseline-shift="sub" font-size="7.5">a</tspan><tspan baseline-shift="super" font-size="7.5">K</tspan>)<tspan baseline-shift="super" font-size="7.5">T</tspan></text>
-        <!-- local column -->
-        <rect class="bx" x="485" y="100" width="190" height="40" stroke="#5BA68A"/>
-        <text class="t" x="580" y="118">ΣHᵢ − ΣHⱼ</text>
-        <text class="t" x="580" y="132" style="font-size:8.5px;fill:rgba(200,200,212,0.6)">edges only, else 0</text>
-        <path class="ar" d="M580,140 L580,157" stroke="rgba(91,166,138,0.7)" marker-end="url(#aht)"/>
-        <rect class="bx" x="485" y="161" width="190" height="40" stroke="#5BA68A"/>
-        <text class="t" x="580" y="185">rᵢⱼ = LN(Linear(·))</text>
-        <path class="ar" d="M580,201 L580,218" stroke="rgba(91,166,138,0.7)" marker-end="url(#aht)"/>
-        <rect class="bx" x="485" y="222" width="190" height="44" stroke="#5BA68A"/>
-        <text class="t" x="580" y="240" style="font-size:9.5px">γᵢⱼ = (xᵢW<tspan baseline-shift="super" font-size="7">Q</tspan>)(rᵢⱼW<tspan baseline-shift="sub" font-size="7">r</tspan><tspan baseline-shift="super" font-size="7">K</tspan>)<tspan baseline-shift="super" font-size="7">T</tspan></text>
-        <text class="t" x="580" y="256" style="font-size:9.5px">+ (rⱼᵢW<tspan baseline-shift="sub" font-size="7">r</tspan><tspan baseline-shift="super" font-size="7">Q</tspan>)(xⱼW<tspan baseline-shift="super" font-size="7">K</tspan>)<tspan baseline-shift="super" font-size="7">T</tspan></text>
-        <!-- merge -->
-        <path class="ar" d="M120,266 C120,296 290,290 300,308" stroke="rgba(107,141,173,0.6)" marker-end="url(#ahs)"/>
-        <path class="ar" d="M350,266 L350,306" stroke="rgba(201,168,76,0.7)" marker-end="url(#ahg)"/>
-        <path class="ar" d="M580,266 C580,296 410,290 400,308" stroke="rgba(91,166,138,0.7)" marker-end="url(#aht)"/>
-        <rect class="bx" x="160" y="312" width="380" height="50" stroke="rgba(201,168,76,0.8)" style="fill:rgba(201,168,76,0.1)"/>
-        <text class="t" x="350" y="333" style="font-size:11.5px">Aᵢⱼ = (αᵢⱼ + βᵢⱼ + γᵢⱼ) / √2</text>
-        <text class="t" x="350" y="350" style="font-size:9px;fill:rgba(200,200,212,0.65)">→ softmax over j → weighted sum of xⱼW<tspan baseline-shift="super" font-size="7">V</tspan> → zᵢ</text>
-      </svg>
+      <div class="edu-block">
+        <div class="edu-marker">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3L1 9l11 6 9-4.91V17M5 13.18v4L12 21l7-3.82v-4"/></svg>
+        </div>
+        <div>
+          <div class="edu-degree">M.Eng. Mechatronics &amp; Cyber-Physical Systems</div>
+          <div class="edu-school">Technische Hochschule Deggendorf, Germany</div>
+          <div class="edu-detail">Specialisation: Robotics, Computer Vision, AI, Autonomous Systems</div>
+        </div>
       </div>
-    </div>
+    </section>
 
-    <h3 class="sub">Why both?</h3>
+    <section id="writing" class="reveal">
+      <div class="section-header">
+        <span class="section-number">06</span>
+        <span class="section-title">Writing</span>
+        <span class="section-rule"></span>
+      </div>
+      <div class="projects-grid" style="grid-template-columns: 1fr;">
 
-    <p>The ablations are the payoff of the whole design. With only the global bias, the model already beats almost every baseline; the same is true with only the local bias. With both, it does better still. The authors' explanation, which I found convincing: the global bias sees every pair but is soft and perhaps fragile. The local bias is precise, but a node only learns about its two-hop neighbourhood by stacking a second layer, its three-hop neighbourhood with a third. Local information is hard to lose; global information is wide. Each covers the other's weak spot.</p>
+        <div class="proj-card">
+          <span class="proj-arrow">↗</span>
+          <div class="proj-name"><a href="blog/tree-positional-encoding.html">Teaching a Transformer to see trees — study notes on tree positional encoding (Part 1)</a></div>
+          <p class="proj-desc">Why a flat token sequence loses the shape of code, and how Peng et al. (2022) give every syntax-tree node a coordinate the attention layer can read. Includes a live Python-to-AST builder, a tree-position explorer, and the 136-entry coordinate triangle.</p>
+          <div class="proj-stack">Transformers · Code Representation · AST · Interactive</div>
+        </div>
 
-    <h3 class="sub">Three checks before moving on</h3>
+        <div class="proj-card">
+          <span class="proj-arrow">↗</span>
+          <div class="proj-name"><a href="blog/testing-a-safety-net.html">Building a safety net — a field notebook on testing (Part 1)</a></div>
+          <p class="proj-desc">Why every working app quietly rots without tests, and how I built a three-layer suite — pure functions, HTTP endpoints, a real browser — for a small todo app I use every day. Includes an interactive test pyramid and an annotated AAA walkthrough.</p>
+          <div class="proj-stack">Software Testing · Pytest · Playwright · Interactive</div>
+        </div>
+        
+        <div class="proj-card">
+          <span class="proj-arrow">↗</span>
+          <div class="proj-name"><a href="blog/index.html">Notes on model evaluation — AUROC, F1, precision &amp; recall</a></div>
+          <p class="proj-desc">A field guide to why accuracy lies under class imbalance, and why AUROC — born from WWII radar signal detection — is still the cleanest way to judge whether a classifier can separate signal from noise. Includes an interactive threshold simulator.</p>
+          <div class="proj-stack">Model Evaluation · AUROC · Interactive</div>
+        </div>
 
-    <details class="check">
-      <summary>Two sibling nodes share a parent but have no edge between them. What is rᵢⱼ?</summary>
-      <p>Zero. Only parent–child pairs get a relation vector. The siblings can still relate through βᵢⱼ: their absolute positions share everything except the last coordinate.</p>
-    </details>
-    <details class="check">
-      <summary>Node i is the 3rd of 4 children of j. Which embedding survives the subtraction in rᵢⱼ, and with which sign?</summary>
-      <p>h(3, 4) — i's own last coordinate — with a plus sign. In rⱼᵢ the same embedding appears with a minus sign, which is what marks j as the parent.</p>
-    </details>
-    <details class="check">
-      <summary>A node sits at depth 20 and the max depth is 16. What happens to its Hᵢ?</summary>
-      <p>It's truncated to its first 16 vectors — the ones nearest the root — before concatenation. The four deepest steps of its path are dropped from aᵢ. Its relation vectors to its parent and children still carry its own last coordinate.</p>
-    </details>
+        
+      </div>
+    </section>
 
-    <!-- ================= EPILOGUE ================= -->
-    <div class="section-header">
-      <span class="section-number">∴</span>
-      <span class="section-title">What the five stages add up to</span>
-      <span class="section-rule"></span>
-    </div>
-
-    <p>Looking back, the trail was shorter than it felt. Transformers are order-blind, so they need positions. Code's real order is a tree, not a line, so sequential positions lose its parent–child and sibling structure. Peng et al. describe a node's place in the tree as a list of (sibling order, child count) coordinates — a description you can rebuild the whole tree from. Each coordinate is embedded through a 136-row table, padded to a fixed length, and turned into two signals: a global vector aᵢ that lets any two nodes compare positions, and a local vector rᵢⱼ that tells adjacent nodes exactly how they're related, and which of them is the parent. Both are added to ordinary content attention, disentangled, and the combination beats either half alone on code summarization and code completion.</p>
-
-    <p>The two questions that unlocked it for me were embarrassingly basic. Where does 136 come from? (A triangle, because you can't be child 5 of 3.) Is Hᵢ per node or per tree? (Per node, variable length, padded to 16.) If you got stuck in the same places, you're in good company.</p>
-
-    <h3 class="sub">What's next</h3>
-
-    <p>These notes cover the method. Still on the trail: the experiments and ablations in full detail, including what happens when you remove each component; TreeGen (2020) and Bartkowiak (2025), and how you retrofit tree positions into a model that's already been pretrained; and a practical mental model for implementing all of this. That's Part 2. For now, the core of tree positional encoding is in place: to this Transformer, code isn't a string anymore. It's a tree. I doubt I'll look at a positional embedding the same way again.</p>
-
-    <h3 class="sub">References</h3>
-    <ul class="refs">
-      <li>Han Peng, Ge Li, Yunfei Zhao, Zhi Jin. <a href="https://aclanthology.org/2022.emnlp-main.210" target="_blank">Rethinking Positional Encoding in Tree Transformer for Code Representation</a>. EMNLP 2022. Code: <a href="https://github.com/AwdHanPeng/TreeTransformer" target="_blank">AwdHanPeng/TreeTransformer</a>.</li>
-      <li>Vaswani et al. <a href="https://arxiv.org/abs/1706.03762" target="_blank">Attention Is All You Need</a>. NeurIPS 2017.</li>
-      <li>Vighnesh Shiv, Chris Quirk. Novel Positional Encodings to Enable Tree-Based Transformers. NeurIPS 2019.</li>
-      <li>Guolin Ke, Di He, Tie-Yan Liu. <a href="https://arxiv.org/abs/2006.15595" target="_blank">Rethinking Positional Encoding in Language Pre-training</a>. 2020.</li>
-      <li>Pengcheng He et al. <a href="https://arxiv.org/abs/2006.03654" target="_blank">DeBERTa: Decoding-enhanced BERT with Disentangled Attention</a>. 2020.</li>
-    </ul>
-
-  </article>
-</div>
-
-<footer>
-  <div class="footer-inner">
-    <div class="footer-left">Let's <span>connect</span>.</div>
-    <div class="footer-links">
-      <a href="mailto:vanmaliaakash5@gmail.com">Email</a>
-      <a href="https://github.com/aakashvanmali45" target="_blank">GitHub</a>
-      <a href="https://linkedin.com/in/aakashvanmali" target="_blank">LinkedIn</a>
-    </div>
   </div>
-  <div class="footer-note">© 2026 Aakash Vanmali · Study notes on tree positional encoding, rebuilt one stage at a time</div>
-</footer>
 
-<script>
-(function(){
-'use strict';
-const RM = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-const SVGNS = 'http://www.w3.org/2000/svg';
-const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const N = (type, value = null, children = []) => ({ type, value, children });
-const labelOf = n => n.value != null ? `${n.type} ${n.value}` : n.type;
-const fmtF = F => '{' + F.map(c => `(${c[0]},${c[1]})`).join(', ') + '}';
-const clamp16 = v => Math.min(v, 16);
+  <footer>
+    <div class="footer-inner">
+      <div class="footer-left">Let's <span>connect</span>.</div>
+      <div class="footer-links">
+        <a href="mailto:vanmaliaakash5@gmail.com">Email</a>
+        <a href="https://github.com/aakashvanmali45" target="_blank">GitHub</a>
+        <a href="https://linkedin.com/in/aakashvanmali" target="_blank">LinkedIn</a>
+      </div>
+    </div>
+    <div class="footer-bottom">© 2026 Aakash Vanmali · Updated July 2026</div>
+  </footer>
 
-/* ===================== TOKENIZER ===================== */
-function tokenize(src){
-  const lines = src.replace(/\t/g, '    ').replace(/\r/g, '').split('\n');
-  const toks = []; const indents = [0]; let lastLn = 0;
-  const OPS = /^(\*\*|\/\/|==|!=|<=|>=|\+=|-=|\*=|\/=|%=|[-+*\/%<>=()\[\]:,.])/;
-  lines.forEach((line, ln) => {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed[0] === '#') return;
-    lastLn = ln;
-    const ind = line.match(/^ */)[0].length;
-    if (ind > indents[indents.length - 1]) { indents.push(ind); toks.push({ t:'INDENT', v:'INDENT', ln }); }
-    while (ind < indents[indents.length - 1]) { indents.pop(); toks.push({ t:'DEDENT', v:'DEDENT', ln }); }
-    if (ind !== indents[indents.length - 1]) throw new Error(`Line ${ln+1}: the indentation doesn't match any open block.`);
-    let i = ind;
-    while (i < line.length) {
-      const c = line[i];
-      if (c === ' ') { i++; continue; }
-      if (c === '#') break;
-      const rest = line.slice(i); let m;
-      if ((m = rest.match(/^[A-Za-z_]\w*/))) { toks.push({ t:'NAME', v:m[0], ln }); i += m[0].length; continue; }
-      if ((m = rest.match(/^\d+(\.\d+)?/))) { toks.push({ t:'NUMBER', v:m[0], ln }); i += m[0].length; continue; }
-      if ((m = rest.match(/^("([^"\\]|\\.)*"|'([^'\\]|\\.)*')/))) { toks.push({ t:'STRING', v:m[0], ln }); i += m[0].length; continue; }
-      if ((m = rest.match(OPS))) { toks.push({ t:'OP', v:m[0], ln }); i += m[0].length; continue; }
-      throw new Error(`Line ${ln+1}: this playground doesn't understand "${c}".`);
-    }
-    toks.push({ t:'NEWLINE', v:'NEWLINE', ln });
-  });
-  while (indents.length > 1) { indents.pop(); toks.push({ t:'DEDENT', v:'DEDENT', ln:lastLn }); }
-  toks.push({ t:'EOF', v:'', ln:lastLn });
-  return toks;
-}
+  <script>
+  // ============================================================
+  // CLUSTERING ANIMATION
+  // "You can only connect the dots looking backwards" — Steve Jobs
+  //
+  // Phase 1: Random scatter (chaos, no structure)
+  // Phase 2: Local edges form (nearest-neighbor connections appear)
+  // Phase 3: Points drift to cluster centers, colors differentiate
+  // Phase 4: Inter-cluster bridges form
+  // Phase 5: Ambient — labels visible, gentle floating
+  // ============================================================
+  (function() {
+    const canvas = document.getElementById('clusterCanvas');
+    const ctx = canvas.getContext('2d');
+    const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let W, H;
 
-/* ===================== PARSER (teaching subset) ===================== */
-const KW = new Set(['if','elif','else','while','for','in','def','return','pass','break','continue','and','or','not','is','True','False','None','lambda','class','import','from','with','try','except','yield']);
-function parse(src){
-  const toks = tokenize(src); let p = 0;
-  const peek = () => toks[p];
-  const next = () => toks[p++];
-  const is = (t, v) => peek().t === t && (v === undefined || peek().v === v);
-  const isOp = v => is('OP', v);
-  const isKw = v => is('NAME', v);
-  function fail(msg){
-    const tk = peek();
-    const near = tk.t === 'NEWLINE' ? 'the end of the line' : tk.t === 'EOF' ? 'the end of the code' : tk.t === 'INDENT' || tk.t === 'DEDENT' ? 'an indentation change' : `"${tk.v}"`;
-    throw new Error(`Line ${tk.ln+1}: ${msg} (near ${near}).`);
-  }
-  function expect(t, v){ if (!is(t, v)) fail(`expected ${v || t.toLowerCase()}`); return next(); }
+    // Cluster definitions — these are the "discovered" groups
+    const CLUSTERS = [
+      { label: 'Mechatronics',     color: [201, 168, 76] },    // gold
+      { label: 'Computer Vision',  color: [107, 141, 173] },   // steel blue
+      { label: 'Robotics',         color: [91, 166, 138] },    // teal
+      { label: 'Machine Learning', color: [212, 149, 107] },   // warm amber
+      { label: 'Industrial AI',    color: [139, 125, 184] },   // lavender
+    ];
 
-  function module(){
-    const body = [];
-    while (!is('EOF')) { if (is('NEWLINE')) { next(); continue; } body.push(stmt()); }
-    if (!body.length) throw new Error('Type some Python to see its tree.');
-    return N('Module', null, body);
-  }
-  function block(){
-    if (is('NEWLINE')) {
-      next(); if (!is('INDENT')) fail('expected an indented block');
-      next(); const s = [];
-      while (!is('DEDENT') && !is('EOF')) { if (is('NEWLINE')) { next(); continue; } s.push(stmt()); }
-      if (is('DEDENT')) next();
-      return s;
-    }
-    const s = simple(); expect('NEWLINE'); return [s];
-  }
-  function ifStmt(){
-    next();
-    const test = expr(); expect('OP', ':');
-    const kids = [test, N('body', null, block())];
-    if (isKw('elif')) kids.push(N('orelse', null, [ifStmt()]));
-    else if (isKw('else')) { next(); expect('OP', ':'); kids.push(N('orelse', null, block())); }
-    return N('If', null, kids);
-  }
-  function stmt(){
-    if (isKw('if')) return ifStmt();
-    if (isKw('while')) { next(); const t = expr(); expect('OP', ':'); return N('While', null, [t, N('body', null, block())]); }
-    if (isKw('for')) {
-      next(); const tg = expect('NAME').v; if (!isKw('in')) fail('expected "in"'); next();
-      const it = expr(); expect('OP', ':');
-      return N('For', null, [N('Name', tg), it, N('body', null, block())]);
-    }
-    if (isKw('def')) {
-      next(); const name = expect('NAME').v; expect('OP', '(');
-      const args = [];
-      while (!isOp(')')) { args.push(N('arg', expect('NAME').v)); if (isOp(',')) next(); else break; }
-      expect('OP', ')'); expect('OP', ':');
-      return N('FunctionDef', name, [N('arguments', null, args), N('body', null, block())]);
-    }
-    if (isKw('elif') || isKw('else')) fail('"' + peek().v + '" needs a matching if above it');
-    const s = simple(); expect('NEWLINE'); return s;
-  }
-  function simple(){
-    if (isKw('return')) { next(); return (is('NEWLINE') || is('EOF')) ? N('Return') : N('Return', null, [expr()]); }
-    if (isKw('pass')) { next(); return N('Pass'); }
-    if (isKw('break')) { next(); return N('Break'); }
-    if (isKw('continue')) { next(); return N('Continue'); }
-    const e = expr();
-    if (isOp('=')) { next(); return N('Assign', null, [e, expr()]); }
-    if (['+=','-=','*=','/=','%='].some(o => isOp(o))) { const op = next().v; return N('AugAssign', op, [e, expr()]); }
-    return N('Expr', null, [e]);
-  }
-  const expr = () => orExpr();
-  function orExpr(){ let l = andExpr(); if (isKw('or')) { const k = [l]; while (isKw('or')) { next(); k.push(andExpr()); } return N('BoolOp', 'or', k); } return l; }
-  function andExpr(){ let l = notExpr(); if (isKw('and')) { const k = [l]; while (isKw('and')) { next(); k.push(notExpr()); } return N('BoolOp', 'and', k); } return l; }
-  function notExpr(){ if (isKw('not')) { next(); return N('UnaryOp', 'not', [notExpr()]); } return comparison(); }
-  function comparison(){
-    let l = arith();
-    for (;;) {
-      let op = null;
-      if (['<','>','==','!=','<=','>='].some(o => isOp(o))) op = next().v;
-      else if (isKw('in')) { next(); op = 'in'; }
-      else if (isKw('is')) { next(); op = 'is'; if (isKw('not')) { next(); op = 'is not'; } }
-      else if (isKw('not') && toks[p+1] && toks[p+1].v === 'in') { next(); next(); op = 'not in'; }
-      if (!op) return l;
-      l = N('Compare', op, [l, arith()]);
-    }
-  }
-  function arith(){ let l = term(); while (isOp('+') || isOp('-')) { const op = next().v; l = N('BinOp', op, [l, term()]); } return l; }
-  function term(){ let l = factor(); while (isOp('*') || isOp('/') || isOp('//') || isOp('%')) { const op = next().v; l = N('BinOp', op, [l, factor()]); } return l; }
-  function factor(){ if (isOp('-') || isOp('+')) { const op = next().v; return N('UnaryOp', op, [factor()]); } return power(); }
-  function power(){ const b = postfix(); if (isOp('**')) { next(); return N('BinOp', '**', [b, factor()]); } return b; }
-  function postfix(){
-    let n = atom();
-    for (;;) {
-      if (isOp('(')) {
-        next(); const args = [];
-        while (!isOp(')')) { args.push(expr()); if (isOp(',')) next(); else break; }
-        expect('OP', ')'); n = N('Call', null, [n, ...args]);
-      } else if (isOp('.')) { next(); n = N('Attribute', '.' + expect('NAME').v, [n]); }
-      else if (isOp('[')) { next(); const ix = expr(); expect('OP', ']'); n = N('Subscript', null, [n, ix]); }
-      else return n;
-    }
-  }
-  function atom(){
-    const tk = peek();
-    if (tk.t === 'NAME') {
-      if (['True','False','None'].includes(tk.v)) { next(); return N('Constant', tk.v); }
-      if (KW.has(tk.v)) fail(`"${tk.v}" isn't supported here`);
-      next(); return N('Name', tk.v);
-    }
-    if (tk.t === 'NUMBER') { next(); return N('Constant', tk.v); }
-    if (tk.t === 'STRING') { next(); return N('Constant', tk.v); }
-    if (isOp('(')) { next(); const e = expr(); expect('OP', ')'); return e; }
-    if (isOp('[')) {
-      next(); const items = [];
-      while (!isOp(']')) { items.push(expr()); if (isOp(',')) next(); else break; }
-      expect('OP', ']'); return N('List', null, items);
-    }
-    fail('expected a name, number or expression');
-  }
-  return module();
-}
+    const POINT_COUNT = 65;
+    let ANIMATION_START = 0;
 
-/* ===================== TREE RENDERER ===================== */
-function renderTree(host, root, o = {}){
-  const lvl = o.lvl || 64, nh = 34;
-  const padX = 10, padY = 12, vOff = o.virtual ? 1 : 0;
-  const nodes = []; let leaf = 0, maxD = 1, uid = 0;
-  (function rec(n, d, parent, F){
-    n._id = uid++; n._depth = d; n._parent = parent; n._F = F;
-    nodes.push(n); maxD = Math.max(maxD, d);
-    const k = n.children.length;
-    n.children.forEach((c, i) => rec(c, d + 1, n, F.concat([[i + 1, k]])));
-    n._x = k ? (n.children[0]._x + n.children[k - 1]._x) / 2 : leaf++;
-  })(root, 1, null, [[1, 1]]);
+    // Timing (milliseconds)
+    const T = {
+      SCATTER_END: 1600,       // Phase 1 ends (shortened)
+      EDGES_START: 1100,       // Phase 2: edges begin appearing
+      EDGES_FULL: 4200,        // Phase 2: all local edges visible
+      CLUSTER_START: 2600,     // Phase 3: drift begins
+      CLUSTER_DONE: 7800,      // Phase 3: clusters formed
+      BRIDGE_START: 7800,      // Phase 4: inter-cluster links
+      BRIDGE_DONE: 10200,      // Phase 4: bridges visible
+      LABELS_START: 8800,      // Phase 5: labels fade in
+    };
 
-  let slot = o.slot || 82;
-  if (o.fit && host.clientWidth) slot = Math.max(o.minSlot || 66, Math.min(slot, Math.floor((host.clientWidth - 2 * padX - 2) / leaf)));
-  const nw = slot - 10;
-  const contentW = leaf * slot + 2 * padX;
-  const W = Math.max(contentW, o.minW || 0);
-  const offX = (W - contentW) / 2;
-  const H = padY * 2 + (maxD - 1 + vOff) * lvl + nh;
-  const cx = n => offX + padX + n._x * slot + slot / 2;
-  const cy = d => padY + nh / 2 + (d - 1 + vOff) * lvl;
-  const maxChars = Math.max(4, Math.floor(nw / 6.3));
-  const trunc = s => s.length > maxChars ? s.slice(0, maxChars - 1) + '…' : s;
-  const edge = (x1, y1, x2, y2) => { const m = (y1 + y2) / 2; return `M${x1},${y1} C${x1},${m} ${x2},${m} ${x2},${y2}`; };
+    let points = [];
+    let clusterCenters = [];
 
-  let edges = '', boxes = '';
-  if (o.virtual) {
-    const x = cx(root), y = padY + nh / 2;
-    edges += `<path class="te v${o.animate ? ' pending' : ''}" data-e="${root._id}" d="${edge(x, y + nh/2, x, cy(1) - nh/2)}"/>`;
-    boxes += `<g class="tn virtual"><rect x="${x - nw/2}" y="${y - nh/2}" width="${nw}" height="${nh}" rx="3"/><text class="ty" x="${x}" y="${y + 4}">virtual</text></g>`;
-  }
-  nodes.forEach(n => {
-    if (n._parent) edges += `<path class="te${o.animate ? ' pending' : ''}" data-e="${n._id}" d="${edge(cx(n._parent), cy(n._parent._depth) + nh/2, cx(n), cy(n._depth) - nh/2)}"/>`;
-    const x = cx(n), y = cy(n._depth);
-    const cls = ['tn', n.children.length ? '' : 'leaf', n === root ? 'root' : '', o.animate ? 'pending' : ''].filter(Boolean).join(' ');
-    const label = o.letters ? n.type : n.type;
-    const hasVal = n.value != null;
-    boxes += `<g class="${cls}" data-id="${n._id}" tabindex="0" role="button" aria-label="${esc(labelOf(n))}">` +
-      `<title>${esc(labelOf(n))}</title>` +
-      `<rect x="${x - nw/2}" y="${y - nh/2}" width="${nw}" height="${nh}" rx="3"/>` +
-      `<text class="ty" x="${x}" y="${hasVal ? y - 2 : y + 4}"${o.letters ? ' style="font-size:13px;font-family:var(--serif);font-weight:600"' : ''}>${esc(trunc(label))}</text>` +
-      (hasVal ? `<text class="va" x="${x}" y="${y + 11}">${esc(trunc(String(n.value)))}</text>` : '') +
-      `</g>`;
-  });
-  host.innerHTML = `<svg xmlns="${SVGNS}" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${edges}${boxes}</svg>`;
-  const svg = host.querySelector('svg');
-  const gOf = n => svg.querySelector(`g.tn[data-id="${n._id}"]`);
-  const eOf = n => svg.querySelector(`path.te[data-e="${n._id}"]`);
+    function resize() {
+      W = canvas.width = canvas.offsetWidth;
+      H = canvas.height = canvas.offsetHeight;
+      init();
+    }
 
-  const api = {
-    nodes, root,
-    show(n){ const g = gOf(n), e = eOf(n); if (g) g.classList.remove('pending'); if (e) e.classList.remove('pending'); },
-    showAll(){ svg.querySelectorAll('.pending').forEach(el => el.classList.remove('pending')); },
-    hideAll(){ nodes.forEach(n => { gOf(n).classList.add('pending'); const e = eOf(n); if (e) e.classList.add('pending'); }); },
-    select(n, cls = 'sel'){
-      svg.querySelectorAll('.sel,.hl,.path').forEach(el => el.classList.remove('sel', 'hl', 'path'));
-      if (!n) return;
-      gOf(n).classList.add(cls);
-      let cur = n;
-      while (cur) { const e = eOf(cur); if (e) e.classList.add('path'); if (cur !== n) gOf(cur).classList.add('path'); cur = cur._parent; }
-      if (host.scrollWidth > host.clientWidth) {
-        const want = cx(n) - host.clientWidth / 2;
-        if (cx(n) < host.scrollLeft + 40 || cx(n) > host.scrollLeft + host.clientWidth - 40) host.scrollLeft = Math.max(0, want);
+    function init() {
+      points = [];
+      clusterCenters = [];
+
+      // Generate cluster target positions (spread across canvas, avoiding hero text area)
+      // Hero content is roughly in the left-center, so bias clusters to right and edges
+      const margin = 80;
+      const zones = [
+        { x: W * 0.85, y: H * 0.12 },   // top-right
+        { x: W * 0.78, y: H * 0.50 },   // mid-right
+        { x: W * 0.12, y: H * 0.12 },   // top-left
+        { x: W * 0.50, y: H * 0.10 },   // top-center
+        { x: W * 0.15, y: H * 0.55 },   // mid-left
+      ];
+
+      CLUSTERS.forEach((c, ci) => {
+        const zone = zones[ci];
+        clusterCenters.push({
+          x: zone.x,
+          y: zone.y,
+          label: c.label,
+          color: c.color,
+        });
+      });
+
+      // Create points with random initial positions and assigned cluster targets
+      for (let i = 0; i < POINT_COUNT; i++) {
+        const clusterIdx = i % CLUSTERS.length;
+        const center = clusterCenters[clusterIdx];
+        // Target position: near cluster center with some spread
+        const spread = 45 + Math.random() * 35;
+        const angle = Math.random() * Math.PI * 2;
+        const tx = center.x + Math.cos(angle) * spread;
+        const ty = center.y + Math.sin(angle) * spread;
+
+        points.push({
+          // Random start position (Phase 1)
+          sx: margin + Math.random() * (W - margin * 2),
+          sy: margin + Math.random() * (H - margin * 2),
+          // Target clustered position (Phase 3+)
+          tx: tx,
+          ty: ty,
+          // Current position (interpolated)
+          x: 0,
+          y: 0,
+          cluster: clusterIdx,
+          r: 1.5 + Math.random() * 1.2,
+          // Small ambient drift velocity
+          dvx: (Math.random() - 0.5) * 0.12,
+          dvy: (Math.random() - 0.5) * 0.12,
+          // Appearance delay (stagger the scatter)
+          appearAt: Math.random() * 800,
+        });
       }
     }
-  };
-  if (o.onSelect) {
-    svg.querySelectorAll('g.tn[data-id]').forEach(g => {
-      const n = nodes[+g.dataset.id];
-      const fire = () => { api.select(n); o.onSelect(n); };
-      g.addEventListener('click', fire);
-      g.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); fire(); } });
-    });
-  }
-  return api;
-}
 
-function childInfo(n){
-  const p = n._parent;
-  return { i: p ? p.children.indexOf(n) + 1 : 1, k: p ? p.children.length : 1, p };
-}
+    // Easing: smooth step
+    function smoothstep(t) {
+      t = Math.max(0, Math.min(1, t));
+      return t * t * (3 - 2 * t);
+    }
 
-/* ===================== FIGURE: x = a + b ===================== */
-(function(){
-  const host = document.getElementById('figAst1');
-  const assign = parse('x = a + b').children[0];
-  renderTree(host, assign, { minW: 300 });
-})();
+    function draw(now) {
+      const elapsed = now - ANIMATION_START;
+      ctx.clearRect(0, 0, W, H);
 
-/* ===================== TRIANGLE ===================== */
-const Tri = (function(){
-  const grid = document.getElementById('tri');
-  const info = document.getElementById('triInfo');
-  const capIn = document.getElementById('triCap');
-  const capVal = document.getElementById('triCapVal');
-  const count = document.getElementById('triCount');
-  const cells = {};
-  let cap = 16, used = [];
-  const idxOf = (i, j) => j * (j - 1) / 2 + i;
-  const ord = n => n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : n + 'th';
+      // ---- Compute current positions ----
+      const clusterProgress = smoothstep((elapsed - T.CLUSTER_START) / (T.CLUSTER_DONE - T.CLUSTER_START));
 
-  grid.appendChild(Object.assign(document.createElement('div'), { className: 'ax' }));
-  for (let j = 1; j <= 16; j++) { const a = document.createElement('div'); a.className = 'ax'; a.textContent = j; grid.appendChild(a); }
-  for (let i = 1; i <= 16; i++) {
-    const a = document.createElement('div'); a.className = 'ax'; a.textContent = i; grid.appendChild(a);
-    for (let j = 1; j <= 16; j++) {
-      const c = document.createElement('div'); c.className = 'c';
-      if (i <= j) {
-        c.classList.add('v'); c.tabIndex = 0;
-        c.setAttribute('aria-label', `sibling order ${i}, child count ${j}`);
-        const show = () => describe(i, j);
-        c.addEventListener('mouseenter', show); c.addEventListener('focus', show); c.addEventListener('click', show);
+      points.forEach(p => {
+        // Appearance: fade in during scatter phase
+        p.visible = elapsed > p.appearAt;
+        if (!p.visible) return;
+
+        // Interpolate between random position and cluster position
+        p.x = p.sx + (p.tx - p.sx) * clusterProgress;
+        p.y = p.sy + (p.ty - p.sy) * clusterProgress;
+
+        // Add ambient drift after clustering
+        if (clusterProgress > 0.8 && !REDUCED) {
+          p.x += Math.sin(now * 0.0004 + p.tx) * 2;
+          p.y += Math.cos(now * 0.0005 + p.ty) * 2;
+        }
+      });
+
+      // ---- Phase 2: Draw local edges ----
+      const edgeProgress = smoothstep((elapsed - T.EDGES_START) / (T.EDGES_FULL - T.EDGES_START));
+      if (edgeProgress > 0) {
+        // During clustering, only connect within-cluster points
+        // Before clustering, connect nearest neighbors regardless
+        const maxEdgeDist = 120 - clusterProgress * 30; // tighten as clusters form
+        const visiblePoints = points.filter(p => p.visible);
+
+        for (let i = 0; i < visiblePoints.length; i++) {
+          for (let j = i + 1; j < visiblePoints.length; j++) {
+            const a = visiblePoints[i], b = visiblePoints[j];
+            const dx = a.x - b.x;
+            const dy = a.y - b.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (dist > maxEdgeDist) continue;
+
+            // After clustering starts, fade out cross-cluster edges
+            const sameCluster = a.cluster === b.cluster;
+            let alpha;
+            if (sameCluster) {
+              alpha = edgeProgress * (1 - dist / maxEdgeDist) * 0.12;
+            } else {
+              // Cross-cluster edges: appear early, fade as clusters form
+              alpha = edgeProgress * (1 - clusterProgress) * (1 - dist / maxEdgeDist) * 0.06;
+            }
+            if (alpha < 0.003) continue;
+
+            // Color: blend toward cluster color as clustering progresses
+            const c = CLUSTERS[a.cluster].color;
+            const r = Math.round(200 + (c[0] - 200) * clusterProgress);
+            const g = Math.round(200 + (c[1] - 200) * clusterProgress);
+            const bl = Math.round(200 + (c[2] - 200) * clusterProgress);
+
+            ctx.strokeStyle = `rgba(${r},${g},${bl},${alpha})`;
+            ctx.lineWidth = 0.6;
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(b.x, b.y);
+            ctx.stroke();
+          }
+        }
       }
-      cells[i + ',' + j] = c; grid.appendChild(c);
+
+      // ---- Phase 4: Inter-cluster bridges ----
+      const bridgeProgress = smoothstep((elapsed - T.BRIDGE_START) / (T.BRIDGE_DONE - T.BRIDGE_START));
+      if (bridgeProgress > 0) {
+        // Connect cluster centers
+        const bridges = [[0,1],[1,2],[2,3],[3,4],[4,0],[0,3],[1,4]];
+        bridges.forEach(([a, b]) => {
+          const ca = clusterCenters[a], cb = clusterCenters[b];
+          const alpha = bridgeProgress * 0.06;
+          ctx.strokeStyle = `rgba(201, 168, 76, ${alpha})`;
+          ctx.lineWidth = 1;
+          ctx.setLineDash([4, 6]);
+          ctx.beginPath();
+          ctx.moveTo(ca.x, ca.y);
+          ctx.lineTo(cb.x, cb.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        });
+      }
+
+      // ---- Draw points ----
+      points.forEach(p => {
+        if (!p.visible) return;
+
+        const appearProgress = smoothstep((elapsed - p.appearAt) / 600);
+        const c = CLUSTERS[p.cluster].color;
+
+        // Color transitions: white → cluster color
+        const r = Math.round(220 + (c[0] - 220) * clusterProgress);
+        const g = Math.round(220 + (c[1] - 220) * clusterProgress);
+        const bl = Math.round(220 + (c[2] - 220) * clusterProgress);
+
+        const baseAlpha = 0.15 + clusterProgress * 0.35;
+        const alpha = appearProgress * baseAlpha;
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r * (0.5 + appearProgress * 0.5), 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${r},${g},${bl},${alpha})`;
+        ctx.fill();
+
+        // Glow ring after clustering
+        if (clusterProgress > 0.5) {
+          const glowAlpha = (clusterProgress - 0.5) * 2 * alpha * 0.15;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.r + 4, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(${r},${g},${bl},${glowAlpha})`;
+          ctx.fill();
+        }
+      });
+
+      // ---- Phase 5: Cluster center anchors (no text — let the visual speak) ----
+      const labelProgress = smoothstep((elapsed - T.LABELS_START) / 2000);
+      if (labelProgress > 0) {
+        clusterCenters.forEach((cc, ci) => {
+          const c = CLUSTERS[ci].color;
+          // Subtle center dot
+          ctx.beginPath();
+          ctx.arc(cc.x, cc.y, 3, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${labelProgress * 0.3})`;
+          ctx.fill();
+          // Soft halo
+          ctx.beginPath();
+          ctx.arc(cc.x, cc.y, 14, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${labelProgress * 0.04})`;
+          ctx.fill();
+        });
+      }
+
+      if (!REDUCED) {
+        requestAnimationFrame(draw);
+      }
     }
-  }
-  function describe(i, j){
-    info.classList.add('active');
-    if (j > cap) { info.innerHTML = `<strong>(${i}, ${j})</strong> is above the current cap of ${cap} children, so it would be clamped to (${Math.min(i, cap)}, ${cap}).`; return; }
-    info.innerHTML = `<strong>(${i}, ${j})</strong> — "I am the ${ord(i)} of ${j} children." Row ${idxOf(i, j)} of ${cap * (cap + 1) / 2} in the embedding table.`;
-  }
-  function paint(){
-    for (let i = 1; i <= 16; i++) for (let j = i; j <= 16; j++) {
-      const c = cells[i + ',' + j];
-      c.classList.toggle('off', j > cap);
-      c.classList.remove('used');
+
+    function start() {
+      resize();
+      // Guard: if canvas still has no dimensions, retry
+      if (W < 10 || H < 10) {
+        setTimeout(start, 100);
+        return;
+      }
+      ANIMATION_START = performance.now();
+      if (REDUCED) {
+        draw(ANIMATION_START + 20000);
+      } else {
+        requestAnimationFrame(draw);
+      }
     }
-    used.forEach(([i, j]) => { const c = cells[clamp16(i) + ',' + clamp16(j)]; if (c) c.classList.add('used'); });
-    count.innerHTML = `${cap * (cap + 1) / 2}<small>table entries</small>`;
-    capVal.textContent = cap;
-  }
-  capIn.addEventListener('input', () => { cap = +capIn.value; paint(); });
-  paint();
-  return { highlight(F){ used = F || []; paint(); } };
-})();
 
-/* ===================== EXPLORER ===================== */
-const Explorer = (function(){
-  const host = document.getElementById('exTree');
-  const panel = document.getElementById('exPanel');
-  const bDemo = document.getElementById('exSrcDemo'), bLab = document.getElementById('exSrcLab');
-  const demo = () => N('A', null, [N('B', null, [N('D'), N('E')]), N('C', null, [N('F')])]);
-  let api = null, letters = true;
+    // Wait for layout: rAF ensures at least one paint has happened
+    requestAnimationFrame(() => { requestAnimationFrame(start); });
 
-  function show(n){
-    const { i, k, p } = childInfo(n);
-    const F = n._F, d = n._depth;
-    const steps = F.map((c, idx) => `<span class="coord${idx === F.length - 1 ? ' last' : ''}" title="child ${c[0]} of ${c[1]}">(${c[0]},${c[1]})</span>`).join('');
-    const words = F.map(c => `child ${c[0]} of ${c[1]}`).join(' → ');
-    let slots = '';
-    for (let s = 0; s < 16; s++) slots += s < F.length ? `<div class="hs f">${clamp16(F[s][0])},${clamp16(F[s][1])}</div>` : `<div class="hs">0</div>`;
-    const trunc = F.length > 16 ? `<br><span class="neg">Depth ${d} &gt; 16: levels 17–${d} are cut before concatenation.</span>` : '';
-    const name = letters ? n.type : labelOf(n);
-    const pName = p ? (letters ? p.type : labelOf(p)) : 'the virtual node';
-    const last = F[F.length - 1];
-    const local = p
-      ? `r(${esc(name)}, ${esc(pName)}) ← <span class="pos">+h(${last[0]},${last[1]})</span><br>r(${esc(pName)}, ${esc(name)}) ← <span class="neg">−h(${last[0]},${last[1]})</span><br><span style="opacity:.7">Every non-neighbour gets r = 0.</span>`
-      : `The root's only real edges go to its children. Select one to see its relation vector.`;
-    panel.innerHTML =
-      `<div class="pp-eyebrow">selected node</div>` +
-      `<div class="pp-title">${esc(name)}</div>` +
-      `<p class="pp-tag">Child ${i} of ${k} of ${esc(pName)} · depth ${d}</p>` +
-      `<div class="pp-row"><div class="pp-k">F(x)</div><div class="pp-v"><div class="coords">${steps}</div>${esc(words)}</div></div>` +
-      `<div class="pp-row"><div class="pp-k">Hᵢ → 16</div><div class="pp-v"><div class="hslots">${slots}</div>${F.length} real vector${F.length > 1 ? 's' : ''} + ${Math.max(0, 16 - F.length)} zero pad${trunc}<br><span class="m">Concat → 16 × 32 = 512 → Linear → LN → aᵢ</span></div></div>` +
-      `<div class="pp-row"><div class="pp-k">local r</div><div class="pp-v"><span class="m">${local}</span></div></div>`;
-    Tri.highlight(F);
-  }
-  function load(root, isLetters, preselect){
-    letters = isLetters;
-    api = renderTree(host, root, { virtual: true, onSelect: show, letters: isLetters, slot: isLetters ? 64 : 80, fit: !isLetters, minSlot: 70, minW: 260 });
-    const target = preselect ? preselect(api.nodes) : api.nodes[api.nodes.length - 1];
-    api.select(target); show(target);
-  }
-  bDemo.addEventListener('click', () => { bDemo.classList.add('on'); bLab.classList.remove('on'); load(demo(), true, ns => ns.find(n => n.type === 'E')); });
-  bLab.addEventListener('click', () => { if (!Lab.tree()) return; bLab.classList.add('on'); bDemo.classList.remove('on'); load(Lab.tree(), false, deepest); });
-  function deepest(ns){ return ns.reduce((a, b) => b._depth > a._depth ? b : a, ns[0]); }
-  return {
-    init(){ load(demo(), true, ns => ns.find(n => n.type === 'E')); },
-    fromLab(){ bLab.click(); }
-  };
-})();
+    window.addEventListener('resize', () => { resize(); });
+  })();
 
-/* ===================== AST LAB ===================== */
-const Lab = (function(){
-  const PRESETS = [
-    { label: 'Assignment', code: 'x = a + b' },
-    { label: 'If / else', code: 'if x > 0:\n    y = x + 1\nelse:\n    y = 0' },
-    { label: 'Function with a loop', code: 'def total(xs):\n    s = 0\n    for x in xs:\n        if x > 0:\n            s += x\n    return s' }
-  ];
-  const ta = document.getElementById('codeIn');
-  const status = document.getElementById('astStatus');
-  const host = document.getElementById('astTree');
-  const seq = document.getElementById('astSeq');
-  const info = document.getElementById('astInfo');
-  const btnWrap = document.getElementById('presetBtns');
-  let timer = null, current = null, api = null;
+  // ---- Hero epigraph: fade in after the dots connect ----
+  (function() {
+    const q = document.getElementById('heroQuote');
+    if (!q) return;
+    const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (REDUCED) { q.classList.add('visible'); return; }
+    setTimeout(() => q.classList.add('visible'), 9200);
+  })();
 
-  const lbl = document.createElement('span'); lbl.className = 'lab-label'; lbl.textContent = 'Examples'; btnWrap.appendChild(lbl);
-  const pBtns = PRESETS.map((pr, idx) => {
-    const b = document.createElement('button'); b.className = 'lab-btn'; b.textContent = `${idx + 1} · ${pr.label}`;
-    b.addEventListener('click', () => { pBtns.forEach(x => x.classList.remove('on')); b.classList.add('on'); ta.value = pr.code; build(true); });
-    btnWrap.appendChild(b); return b;
-  });
-  ta.addEventListener('input', () => pBtns.forEach(x => x.classList.remove('on')));
-  ta.addEventListener('keydown', e => {
-    if (e.key === 'Tab') { e.preventDefault(); const s = ta.selectionStart; ta.value = ta.value.slice(0, s) + '    ' + ta.value.slice(ta.selectionEnd); ta.selectionStart = ta.selectionEnd = s + 4; }
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); build(true); }
-  });
+  // ---- Sticky nav ----
+  (function() {
+    const nav = document.getElementById('stickyNav');
+    const hero = document.querySelector('.hero');
+    const observer = new IntersectionObserver(([entry]) => {
+      nav.classList.toggle('visible', !entry.isIntersecting);
+    }, { threshold: 0 });
+    observer.observe(hero);
+  })();
 
-  function onSelect(n){
-    const { i, k, p } = childInfo(n);
-    info.classList.add('active');
-    info.innerHTML = `<strong>${esc(labelOf(n))}</strong> — child ${i} of ${k} of ${p ? '<strong>' + esc(labelOf(p)) + '</strong>' : 'the virtual node'} · depth ${n._depth} · ${n.children.length ? n.children.length + ' child' + (n.children.length > 1 ? 'ren' : '') : 'leaf'}<br><span style="font-family:var(--mono);font-size:0.75rem;color:var(--gold)">F = ${fmtF(n._F)}</span>`;
-  }
-  function build(animate){
-    clearTimeout(timer);
-    let tree;
-    try { tree = parse(ta.value); }
-    catch (err) { status.textContent = err.message; status.classList.add('err'); return; }
-    status.classList.remove('err');
-    current = tree;
-    api = renderTree(host, tree, { onSelect, animate: animate && !RM, minW: 300, fit: true });
-    status.textContent = `${api.nodes.length} nodes · max depth ${Math.max(...api.nodes.map(n => n._depth))}`;
-    info.classList.remove('active');
-    info.innerHTML = 'Click any node to see its family details. The numbers will make sense in Stage 4.';
-    seq.innerHTML = '';
-    const addChip = (n, idx) => { const c = document.createElement('span'); c.className = 'chip'; c.innerHTML = `<i>${idx + 1}</i>${esc(labelOf(n))}`; seq.appendChild(c); };
-    if (!animate || RM) { api.showAll(); api.nodes.forEach(addChip); return; }
-    let s = 0;
-    (function step(){
-      if (s >= api.nodes.length) return;
-      api.show(api.nodes[s]); addChip(api.nodes[s], s); s++;
-      timer = setTimeout(step, 230);
-    })();
-  }
-  document.getElementById('btnBuild').addEventListener('click', () => build(true));
-  document.getElementById('btnInstant').addEventListener('click', () => build(false));
-  document.getElementById('btnToExplorer').addEventListener('click', () => {
-    if (!current) build(false);
-    if (!current) return;
-    Explorer.fromLab();
-    document.getElementById('exLab').scrollIntoView({ behavior: RM ? 'auto' : 'smooth', block: 'start' });
-  });
-  return {
-    init(){ pBtns[1].classList.add('on'); ta.value = PRESETS[1].code; build(false); },
-    tree(){ return current; }
-  };
-})();
+  // ---- Scroll reveal ----
+  (function() {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const els = document.querySelectorAll('.reveal');
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) { e.target.classList.add('visible'); observer.unobserve(e.target); }
+      });
+    }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+    els.forEach(el => observer.observe(el));
+  })();
+  </script>
 
-/* ===================== SNIPPET A vs B ===================== */
-(function(){
-  const A = 'if x:\n    y = 1\nz = 2', B = 'if x:\n    y = 1\n    z = 2';
-  const btn = document.getElementById('btnLayout');
-  let layout = false;
-  const isZ = n => n.type === 'Assign' && n.children[0] && n.children[0].value === 'z';
-  function strip(host, src){
-    const toks = tokenize(src).filter(t => t.t !== 'EOF' && (layout || !['NEWLINE','INDENT','DEDENT'].includes(t.t)));
-    host.innerHTML = toks.map(t => {
-      const lay = ['NEWLINE','INDENT','DEDENT'].includes(t.t);
-      return `<span class="tk${lay ? ' lay' : ''}${t.t === 'DEDENT' ? ' ded' : ''}">${esc(t.v)}</span>`;
-    }).join('');
-  }
-  function tree(host, fHost, src, tag){
-    const api = renderTree(host, parse(src), { slot: 60, lvl: 56, minW: 200 });
-    const z = api.nodes.find(isZ);
-    api.select(z, 'hl');
-    fHost.innerHTML = `z = 2 in ${tag}: <b>${fmtF(z._F)}</b> · depth ${z._depth}<br>parent: ${esc(labelOf(z._parent))}`;
-  }
-  function paint(){ strip(document.getElementById('tokA'), A); strip(document.getElementById('tokB'), B); }
-  btn.addEventListener('click', () => { layout = !layout; btn.classList.toggle('on', layout); btn.setAttribute('aria-pressed', layout); paint(); });
-  paint();
-  tree(document.getElementById('treeA'), document.getElementById('fA'), A, 'A');
-  tree(document.getElementById('treeB'), document.getElementById('fB'), B, 'B');
-})();
-
-Lab.init();
-Explorer.init();
-})();
-</script>
 </body>
 </html>
