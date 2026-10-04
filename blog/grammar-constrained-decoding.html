@@ -1,0 +1,1572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Making Every Token Parse — Study Notes on Grammar-Constrained Decoding · Aakash Vanmali</title>
+<meta name="description" content="Study notes on grammar-constrained decoding from the ground up: logits and masks, grammars, PICARD (2021), SynCode (2025), XGrammar (2024) and IterGen (2025). Eight interactive labs.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root{
+    --ink:#0B1222; --ink-light:#111B2E; --ink-surface:#162038;
+    --gold:#C9A84C; --gold-dim:rgba(201,168,76,0.15); --gold-glow:rgba(201,168,76,0.08);
+    --paper:#F6F2E8; --paper-white:#FDFBF5;
+    --text-dark:#1A1A1A; --text-mid:#4A4A4A; --text-light:#777;
+    --text-on-ink:#C8C8D4; --text-bright:#E8E8F0;
+    --border-paper:#E0D8C8; --border-ink:rgba(255,255,255,0.08);
+    --serif:'Cormorant Garamond', Georgia, serif;
+    --sans:'Space Grotesk', -apple-system, sans-serif;
+    --mono:'JetBrains Mono', monospace;
+    --max-w:780px;
+    --ease: cubic-bezier(0.25,0.46,0.45,0.94);
+    --teal:#5BA68A;
+    --steel:#6B8DAD;
+    --amber:#D4956B;
+    --lavender:#8B7DB8;
+  }
+  html{ font-size:17px; scroll-behavior:smooth; }
+  body{ font-family:var(--sans); color:var(--text-dark); background:var(--paper); line-height:1.7; -webkit-font-smoothing:antialiased; }
+  ::selection{ background:var(--gold); color:var(--ink); }
+  a{ color:var(--gold); text-decoration:none; transition:color .2s; }
+  a:hover{ text-decoration:underline; }
+
+  /* ===== TOPBAR ===== */
+  .topbar{ background:var(--ink); padding:1.1rem 0; }
+  .topbar-inner{ max-width:var(--max-w); margin:0 auto; padding:0 2rem; display:flex; justify-content:space-between; align-items:center; }
+  .topbar-name{ font-family:var(--serif); font-weight:600; font-size:1.15rem; color:var(--text-on-ink); }
+  .topbar-name span{ color:var(--gold); }
+  .topbar-links{ display:flex; gap:1.4rem; }
+  .topbar-links a{ font-family:var(--mono); font-size:0.72rem; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-on-ink); opacity:0.75; }
+  .topbar-links a:hover{ color:var(--gold); opacity:1; text-decoration:none; }
+
+  /* ===== HERO ===== */
+  .hero{ background:var(--ink); padding: 4.5rem 0 4rem; position:relative; overflow:hidden; }
+  .hero::after{
+    content:''; position:absolute; top:-20%; right:-10%; width:480px; height:480px; border-radius:50%;
+    background:radial-gradient(circle, rgba(201,168,76,0.10), transparent 70%);
+  }
+  .hero-inner{ max-width:var(--max-w); margin:0 auto; padding:0 2rem; position:relative; z-index:1; }
+  .hero-eyebrow{ font-family:var(--mono); font-size:0.7rem; letter-spacing:0.2em; text-transform:uppercase; color:var(--gold); margin-bottom:1.2rem; }
+  .hero h1{ font-family:var(--serif); font-weight:600; font-size:3rem; color:var(--text-bright); line-height:1.1; letter-spacing:-0.01em; margin-bottom:1rem; max-width:640px; }
+  .hero-dek{ font-family:var(--serif); font-style:italic; font-size:1.25rem; color:rgba(201,168,76,0.85); max-width:560px; line-height:1.5; }
+  .hero-meta{ font-family:var(--mono); font-size:0.68rem; letter-spacing:0.08em; text-transform:uppercase; color:rgba(200,200,212,0.4); margin-top:2rem; }
+  .hero-tree{ position:absolute; right:2rem; bottom:1.4rem; width:210px; opacity:0.75; z-index:0; }
+  .hero-tree line{ stroke:rgba(201,168,76,0.35); stroke-width:1; }
+  .hero-tree circle{ fill:var(--ink); stroke:rgba(201,168,76,0.6); stroke-width:1; }
+  .hero-tree circle.v{ stroke-dasharray:3 2; stroke:rgba(200,200,212,0.35); }
+  .hero-tree text{ font-family:var(--mono); font-size:7px; fill:rgba(201,168,76,0.75); text-anchor:middle; }
+
+  /* ===== CONTENT ===== */
+  .content{ max-width:var(--max-w); margin:0 auto; padding:0 2rem; }
+  article{ padding:3.5rem 0 1rem; }
+  .section-header{ display:flex; align-items:center; gap:1rem; margin: 3.4rem 0 1.6rem; }
+  .section-header:first-of-type{ margin-top:0; }
+  .section-number{ font-family:var(--serif); font-size:2rem; font-weight:300; color:var(--gold); line-height:1; opacity:0.6; }
+  .section-title{ font-family:var(--serif); font-size:1.5rem; font-weight:600; color:var(--text-dark); letter-spacing:-0.01em; }
+  .section-rule{ flex:1; height:1px; background:var(--border-paper); }
+  h3.sub{ font-family:var(--serif); font-size:1.25rem; font-weight:600; color:var(--text-dark); margin:2.3rem 0 0.7rem; letter-spacing:-0.005em; }
+
+  p{ margin:0 0 1.15rem; font-size:0.98rem; color:var(--text-mid); }
+  p.lead{ font-family:var(--serif); font-size:1.35rem; font-style:italic; color:var(--text-dark); line-height:1.6; }
+  strong{ color:var(--text-dark); font-weight:600; }
+  em{ color:var(--text-dark); }
+  code{ font-family:var(--mono); background:var(--paper-white); border:1px solid var(--border-paper); padding:1px 6px; font-size:0.85em; color:var(--gold); border-radius:2px; }
+  sub, sup{ font-size:0.7em; line-height:0; }
+
+  .formula-block{
+    font-family:var(--mono); background:var(--paper-white); border:1px solid var(--border-paper); border-left:3px solid var(--gold);
+    padding:1rem 1.3rem; margin:1.3rem 0; font-size:0.92rem; color:var(--text-dark); overflow-x:auto; line-height:1.9;
+  }
+  .formula-block .name{ font-family:var(--sans); font-weight:600; color:var(--gold); font-size:0.78rem; letter-spacing:0.04em; text-transform:uppercase; display:block; margin-bottom:0.3rem;}
+  .formula-block .sub{ font-family:var(--sans); color:var(--text-light); font-size:0.8rem; margin-top:0.5rem; line-height:1.55; display:block; }
+  .formula-block .case{ color:var(--text-light); font-size:0.82rem; }
+
+  blockquote{ margin:1.8rem 0; padding:0.2rem 0 0.2rem 1.3rem; border-left:2px solid var(--gold); font-family:var(--serif); font-style:italic; color:var(--text-mid); font-size:1.15rem; }
+
+  .callout{ background:var(--paper-white); border:1px solid var(--border-paper); border-left:3px solid var(--steel); padding:1rem 1.3rem; margin:1.5rem 0; font-size:0.92rem; color:var(--text-mid); }
+  .callout strong{ color:var(--steel); }
+  .callout.gold{ border-left-color:var(--gold); }
+  .callout.gold strong{ color:var(--gold); }
+  .callout.teal{ border-left-color:var(--teal); }
+  .callout.teal strong{ color:var(--teal); }
+  .callout p:last-child{ margin-bottom:0; }
+
+  .question{ margin:2.2rem 0 1rem; padding:1.1rem 1.3rem; background:var(--paper-white); border:1px solid var(--border-paper); border-left:3px solid var(--gold); }
+  .question .q-label{ font-family:var(--mono); font-size:0.64rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--gold); margin-bottom:0.3rem; }
+  .question .q-text{ font-family:var(--serif); font-size:1.3rem; font-weight:600; color:var(--text-dark); line-height:1.35; }
+
+  ol.route{ list-style:none; margin:1.4rem 0 1.6rem; border-top:1px solid var(--border-paper); }
+  ol.route li{ display:grid; grid-template-columns:2.6rem 1fr; padding:0.55rem 0; border-bottom:1px solid var(--border-paper); font-size:0.92rem; color:var(--text-mid); }
+  ol.route li span{ font-family:var(--serif); font-size:1.15rem; color:var(--gold); opacity:0.7; line-height:1.4; }
+
+  /* ===== TABLE ===== */
+  .table-wrap{ overflow-x:auto; margin:1.4rem 0; }
+  table{ width:100%; border-collapse:collapse; font-size:0.9rem; }
+  th,td{ text-align:left; padding:0.65rem 0.6rem; border-bottom:1px solid var(--border-paper); vertical-align:top; }
+  th{ font-family:var(--mono); font-size:0.62rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-light); font-weight:500;}
+  td{ color:var(--text-mid); }
+  td.metric-name{ color:var(--text-dark); font-weight:600; font-family:var(--sans); }
+  td.mono{ font-family:var(--mono); font-size:0.82rem; color:var(--text-dark); }
+  tr:last-child td{ border-bottom:none; }
+
+  /* ===== CODE BLOCK ===== */
+  .codeblk{
+    font-family:var(--mono); background:var(--paper-white); border:1px solid var(--border-paper); border-left:3px solid var(--steel);
+    padding:1rem 1.3rem; margin:1.3rem 0; font-size:0.82rem; color:var(--text-dark); overflow-x:auto; line-height:1.75; white-space:pre;
+  }
+  .codeblk .c{ color:var(--text-light); font-style:italic; }
+  .codeblk .k{ color:var(--steel); }
+  .codeblk .s{ color:var(--teal); }
+  .codeblk .n{ color:var(--amber); }
+  .codeblk .d{ color:var(--gold); }
+
+  /* ===== FIGURE (paper) ===== */
+  .fig{ background:var(--paper-white); border:1px solid var(--border-paper); padding:1.2rem 1.4rem; margin:1.5rem 0; }
+  .bag-row{ display:flex; align-items:center; gap:0.45rem; flex-wrap:wrap; margin:0.45rem 0; }
+  .bag-row .w{ font-family:var(--mono); font-size:0.78rem; padding:0.18rem 0.55rem; border:1px solid var(--border-paper); background:var(--paper); color:var(--text-dark); }
+  .bag-row .arrow{ color:var(--text-light); margin:0 0.3rem; font-family:var(--mono); font-size:0.8rem; }
+  .bag-row .bag{ font-family:var(--mono); font-size:0.78rem; color:var(--gold); border:1px dashed var(--gold); padding:0.18rem 0.75rem; border-radius:999px; background:var(--gold-glow); }
+  .fig-cap{ font-size:0.8rem; color:var(--text-light); margin-top:0.7rem; line-height:1.55; }
+
+  /* ===== INTERACTIVE LABS (ink panels, shared) ===== */
+  .lab{ background:var(--ink); padding:1.6rem 1.5rem 1.8rem; margin:2rem 0 1rem; position:relative; overflow:hidden; }
+  .lab::before{ content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--gold); }
+  .lab-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:1.1rem; flex-wrap:wrap; gap:0.6rem; }
+  .lab-title{ font-family:var(--mono); font-size:0.72rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--gold); display:flex; align-items:center; gap:0.5rem; }
+  .lab-title .dot{ width:6px; height:6px; border-radius:50%; background:var(--gold); animation:blink 2s infinite; }
+  .lab-sub{ font-family:var(--mono); font-size:0.64rem; color:rgba(200,200,212,0.45); }
+  @keyframes blink{ 50%{ opacity:0.3; } }
+
+  .lab-btns{ display:flex; flex-wrap:wrap; gap:0.45rem; margin-bottom:0.9rem; align-items:center; }
+  .lab-btn{
+    font-family:var(--mono); font-size:0.68rem; letter-spacing:0.03em; padding:0.45rem 0.85rem;
+    border:1px solid rgba(201,168,76,0.3); border-radius:2px; background:rgba(255,255,255,0.02); color:var(--text-on-ink);
+    cursor:pointer; transition:all 0.2s;
+  }
+  .lab-btn:hover{ border-color:var(--gold); color:var(--gold); background:var(--gold-dim); }
+  .lab-btn.on{ background:var(--gold); color:var(--ink); border-color:var(--gold); }
+  .lab-btn.ghost{ border-color:rgba(255,255,255,0.12); }
+  .lab-btn:focus-visible, .tn:focus-visible, .tri .c:focus-visible{ outline:2px solid var(--gold); outline-offset:2px; }
+  .lab-label{ font-family:var(--mono); font-size:0.6rem; text-transform:uppercase; letter-spacing:0.08em; color:rgba(200,200,212,0.5); margin:0.2rem 0.4rem 0 0; }
+
+  .lab textarea{
+    width:100%; min-height:132px; font-family:var(--mono); font-size:0.82rem; line-height:1.6; tab-size:4;
+    background:rgba(255,255,255,0.04); border:1px solid var(--border-ink); color:var(--text-bright);
+    padding:0.8rem 1rem; resize:vertical; border-radius:0;
+  }
+  .lab textarea:focus{ outline:none; border-color:rgba(201,168,76,0.5); }
+  .lab-status{ font-family:var(--mono); font-size:0.64rem; color:rgba(200,200,212,0.5); margin:0.55rem 0 0.9rem; min-height:1rem; }
+  .lab-status.err{ color:var(--amber); }
+
+  .tree-host{ background:rgba(255,255,255,0.03); border:1px solid var(--border-ink); overflow-x:auto; padding:0.5rem 0; }
+  .tree-host svg{ display:block; margin:0 auto; }
+  .seq-label{ font-family:var(--mono); font-size:0.6rem; text-transform:uppercase; letter-spacing:0.08em; color:rgba(200,200,212,0.5); margin:1rem 0 0.4rem; }
+  .seq{ display:flex; flex-wrap:wrap; gap:0.3rem; min-height:1.7rem; }
+  .seq .chip{ font-family:var(--mono); font-size:0.64rem; padding:0.18rem 0.45rem; border:1px solid var(--border-ink); color:var(--text-on-ink); background:rgba(255,255,255,0.03); animation:chipIn .3s var(--ease); }
+  .seq .chip i{ font-style:normal; color:var(--gold); margin-right:0.3rem; opacity:0.8; }
+  @keyframes chipIn{ from{ opacity:0; transform:translateY(3px);} to{ opacity:1; transform:none; } }
+
+  .lab-info{
+    margin-top:1rem; padding:0.8rem 1rem; background:rgba(255,255,255,0.04); border:1px solid var(--border-ink);
+    font-family:var(--sans); font-size:0.82rem; color:rgba(200,200,212,0.75); line-height:1.55; min-height:2.6rem;
+    border-left:3px solid rgba(255,255,255,0.15); transition:border-color 0.25s ease;
+  }
+  .lab-info.active{ border-left-color:var(--gold); }
+  .lab-info strong{ color:var(--text-bright); font-weight:600; }
+  .lab-info code{ background:rgba(255,255,255,0.05); border-color:var(--border-ink); }
+  .lab-hint{ font-family:var(--mono); font-size:0.62rem; color:rgba(200,200,212,0.45); text-align:center; margin-top:0.8rem; }
+
+  /* tree svg */
+  .te{ fill:none; stroke:rgba(255,255,255,0.2); stroke-width:1.2; transition:stroke .2s, opacity .35s; }
+  .te.v{ stroke-dasharray:4 3; stroke:rgba(200,200,212,0.25); }
+  .te.path{ stroke:var(--gold); stroke-width:1.9; }
+  .tn{ cursor:pointer; transition:opacity .35s; outline:none; }
+  .tn rect{ fill:rgba(255,255,255,0.04); stroke:rgba(107,141,173,0.75); stroke-width:1.1; transition:all .2s; }
+  .tn.leaf rect{ stroke:rgba(91,166,138,0.8); }
+  .tn.root rect{ stroke:rgba(201,168,76,0.8); }
+  .tn.virtual{ cursor:default; }
+  .tn.virtual rect{ fill:none; stroke:rgba(200,200,212,0.35); stroke-dasharray:4 3; }
+  .tn.virtual .ty{ fill:rgba(200,200,212,0.5); font-style:italic; }
+  .tn:hover rect{ fill:rgba(255,255,255,0.09); }
+  .tn.path rect{ stroke:var(--gold); }
+  .tn.sel rect, .tn.hl rect{ fill:rgba(201,168,76,0.22); stroke:var(--gold); stroke-width:1.7; }
+  .tn .ty{ font-family:var(--sans); font-size:10.5px; font-weight:500; fill:var(--text-bright); text-anchor:middle; pointer-events:none; }
+  .tn .va{ font-family:var(--mono); font-size:9.5px; fill:var(--gold); text-anchor:middle; pointer-events:none; }
+  .pending{ opacity:0; }
+
+  /* explorer */
+  .ex-grid{ display:grid; grid-template-columns:1.1fr 1fr; gap:1.2rem; }
+  @media (max-width:720px){ .ex-grid{ grid-template-columns:1fr; } }
+  .pp{ background:rgba(255,255,255,0.03); border:1px solid var(--border-ink); padding:1.1rem 1.2rem; }
+  .pp-eyebrow{ font-family:var(--mono); font-size:0.6rem; text-transform:uppercase; letter-spacing:0.08em; color:rgba(200,200,212,0.55); margin-bottom:0.4rem; }
+  .pp-title{ font-family:var(--serif); font-size:1.4rem; font-weight:600; color:var(--text-bright); margin-bottom:0.3rem; }
+  .pp-tag{ font-family:var(--sans); font-size:0.8rem; color:rgba(200,200,212,0.65); font-style:italic; margin-bottom:0.8rem; line-height:1.5; }
+  .pp-row{ display:grid; grid-template-columns:4.8rem 1fr; gap:0.7rem; padding:0.6rem 0; border-top:1px solid var(--border-ink); font-size:0.78rem; }
+  .pp-k{ font-family:var(--mono); font-size:0.6rem; color:rgba(200,200,212,0.5); text-transform:uppercase; letter-spacing:0.06em; padding-top:3px; }
+  .pp-v{ color:rgba(200,200,212,0.85); line-height:1.55; min-width:0; }
+  .pp-v .m{ font-family:var(--mono); font-size:0.72rem; color:var(--text-bright); }
+  .coords{ display:flex; flex-wrap:wrap; gap:0.3rem; margin-bottom:0.35rem; }
+  .coord{ font-family:var(--mono); font-size:0.7rem; color:var(--ink); background:var(--gold); padding:0.1rem 0.42rem; }
+  .coord.last{ outline:1px solid var(--gold); outline-offset:2px; }
+  .hslots{ display:grid; grid-template-columns:repeat(8, 1fr); gap:3px; margin:0.15rem 0 0.4rem; }
+  .hs{ font-family:var(--mono); font-size:0.52rem; text-align:center; padding:0.32rem 0; border:1px dashed rgba(255,255,255,0.14); color:rgba(200,200,212,0.35); }
+  .hs.f{ border:1px solid rgba(201,168,76,0.6); background:var(--gold-dim); color:var(--gold); }
+  .neg{ color:var(--amber); }
+  .pos{ color:var(--teal); }
+
+  /* triangle */
+  .tri-wrap{ max-width:540px; margin:0 auto; }
+  .tri{ display:grid; grid-template-columns:1.5rem repeat(16, 1fr); gap:2px; }
+  .tri .c{ aspect-ratio:1; background:rgba(255,255,255,0.025); border:1px solid rgba(255,255,255,0.04); }
+  .tri .c.v{ background:rgba(91,166,138,0.22); border-color:rgba(91,166,138,0.45); cursor:pointer; transition:background .2s, border-color .2s; }
+  .tri .c.v.off{ background:rgba(255,255,255,0.03); border-color:rgba(255,255,255,0.07); }
+  .tri .c.v:hover{ border-color:var(--text-bright); }
+  .tri .c.used{ background:var(--gold) !important; border-color:var(--gold) !important; }
+  .tri .c.focus{ background:rgba(201,168,76,0.55) !important; border-color:var(--gold) !important; }
+  .tri .ax{ font-family:var(--mono); font-size:0.5rem; color:rgba(200,200,212,0.45); display:flex; align-items:center; justify-content:center; }
+  .tri-axis{ font-family:var(--mono); font-size:0.58rem; color:rgba(200,200,212,0.5); text-align:center; margin-top:0.4rem; letter-spacing:0.04em; }
+  .tri-axis.y{ text-align:left; margin:0 0 0.4rem; }
+  .tri-ctrl{ display:flex; align-items:center; gap:1rem; flex-wrap:wrap; margin-top:1.1rem; }
+  .tri-ctrl input[type=range]{ flex:1; min-width:160px; accent-color:var(--gold); }
+  .tri-count{ font-family:var(--serif); font-size:2rem; font-weight:700; color:var(--gold); line-height:1; }
+  .tri-count small{ font-family:var(--mono); font-size:0.6rem; font-weight:400; color:rgba(200,200,212,0.5); letter-spacing:0.05em; display:block; margin-top:0.25rem; text-transform:uppercase; }
+  .tri-legend{ display:flex; gap:1rem; flex-wrap:wrap; font-family:var(--mono); font-size:0.58rem; color:rgba(200,200,212,0.55); margin-top:0.8rem; }
+  .tri-legend span::before{ content:''; display:inline-block; width:9px; height:9px; margin-right:0.35rem; vertical-align:-1px; }
+  .tri-legend .l1::before{ background:rgba(91,166,138,0.35); border:1px solid rgba(91,166,138,0.6); }
+  .tri-legend .l2::before{ background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); }
+  .tri-legend .l3::before{ background:var(--gold); }
+
+  /* snippet A vs B */
+  .ab-grid{ display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+  @media (max-width:720px){ .ab-grid{ grid-template-columns:1fr; } }
+  .ab-col{ min-width:0; }
+  .ab-h{ font-family:var(--mono); font-size:0.66rem; letter-spacing:0.08em; text-transform:uppercase; color:var(--gold); margin-bottom:0.5rem; }
+  .ab-h span{ color:rgba(200,200,212,0.5); text-transform:none; letter-spacing:0.02em; }
+  pre.mini{ font-family:var(--mono); font-size:0.78rem; color:var(--text-bright); background:rgba(255,255,255,0.04); border:1px solid var(--border-ink); padding:0.7rem 0.9rem; line-height:1.6; overflow-x:auto; margin-bottom:0.7rem; }
+  pre.mini .k{ color:var(--steel); } pre.mini .n{ color:var(--amber); } pre.mini .z{ background:rgba(201,168,76,0.22); color:var(--gold); }
+  .tokstrip{ display:flex; flex-wrap:wrap; gap:0.25rem; margin-bottom:0.7rem; min-height:1.5rem; }
+  .tk{ font-family:var(--mono); font-size:0.62rem; padding:0.12rem 0.38rem; border:1px solid var(--border-ink); color:var(--text-on-ink); background:rgba(255,255,255,0.03); }
+  .tk.lay{ color:rgba(200,200,212,0.45); border-style:dashed; font-size:0.55rem; }
+  .tk.ded{ color:var(--ink); background:var(--gold); border:1px solid var(--gold); }
+  .ab-F{ font-family:var(--mono); font-size:0.68rem; color:var(--text-on-ink); margin-top:0.6rem; line-height:1.6; }
+  .ab-F b{ color:var(--gold); font-weight:500; }
+
+  /* pipeline figure */
+  .pipe-host{ overflow-x:auto; }
+  .pipe{ width:100%; min-width:560px; height:auto; display:block; }
+  .pipe .bx{ fill:rgba(255,255,255,0.035); stroke-width:1.1; }
+  .pipe .t{ font-family:var(--mono); font-size:10.5px; fill:var(--text-bright); text-anchor:middle; }
+  .pipe .h{ font-family:var(--mono); font-size:9px; letter-spacing:0.1em; text-anchor:middle; text-transform:uppercase; }
+  .pipe .ar{ fill:none; stroke-width:1.1; }
+
+  /* knowledge checks */
+  details.check{ background:var(--paper-white); border:1px solid var(--border-paper); border-left:3px solid var(--gold); padding:0.85rem 1.2rem; margin:0.8rem 0; }
+  details.check summary{ cursor:pointer; font-weight:600; color:var(--text-dark); font-size:0.94rem; list-style:none; display:flex; gap:0.7rem; align-items:baseline; }
+  details.check summary::-webkit-details-marker{ display:none; }
+  details.check summary::before{ content:'+'; font-family:var(--mono); color:var(--gold); font-weight:500; width:0.8rem; flex-shrink:0; }
+  details.check[open] summary::before{ content:'–'; }
+  details.check p{ margin:0.7rem 0 0 1.5rem; font-size:0.92rem; }
+
+  ul.refs{ list-style:none; margin:1rem 0 0; }
+  ul.refs li{ font-size:0.84rem; color:var(--text-mid); padding:0.45rem 0; border-bottom:1px solid var(--border-paper); line-height:1.55; }
+  ul.refs li:last-child{ border-bottom:none; }
+
+  /* ===== FOOTER ===== */
+  footer{ background:var(--ink); color:var(--text-on-ink); margin-top:3rem; }
+  .footer-inner{ max-width:var(--max-w); margin:0 auto; padding:2.6rem 2rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; }
+  .footer-left{ font-family:var(--serif); font-size:1.1rem; }
+  .footer-left span{ color:var(--gold); }
+  .footer-links{ display:flex; gap:1.3rem; }
+  .footer-links a{ font-size:0.8rem; color:var(--text-on-ink); opacity:0.6; }
+  .footer-links a:hover{ opacity:1; color:var(--gold); text-decoration:none; }
+  .footer-note{ max-width:var(--max-w); margin:0 auto; padding:0 2rem 1.6rem; font-family:var(--mono); font-size:0.62rem; color:rgba(200,200,212,0.3); }
+
+  @media (max-width:640px){
+    .hero h1{ font-size:2.1rem; }
+    .hero-dek{ font-size:1.05rem; }
+    .hero-tree{ display:none; }
+    .content{ padding:0 1.2rem; }
+    .topbar-inner{ padding:0 1.2rem; }
+    .hero-inner{ padding:0 1.2rem; }
+    .lab{ padding:1.3rem 1rem 1.5rem; }
+    .pp-row{ grid-template-columns:1fr; gap:0.2rem; }
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{ animation:none !important; transition:none !important; }
+    html{ scroll-behavior:auto; }
+  }
+
+  /* ===== GCD POST ADDITIONS ===== */
+  .series-nav{ display:flex; justify-content:space-between; gap:1rem; flex-wrap:wrap; font-family:var(--mono); font-size:0.68rem; letter-spacing:0.04em; margin:0 0 1.8rem; }
+  .series-nav a{ color:var(--text-light); }
+  .series-nav a:hover{ color:var(--gold); }
+  .hero-chips{ position:absolute; right:2rem; bottom:1.6rem; display:flex; gap:5px; opacity:0.8; z-index:0; }
+  .hero-chips span{ font-family:var(--mono); font-size:0.62rem; padding:0.25rem 0.45rem; border:1px solid rgba(201,168,76,0.45); color:rgba(201,168,76,0.85); }
+  .hero-chips span.x{ border-color:rgba(212,149,107,0.5); color:rgba(212,149,107,0.7); text-decoration:line-through; }
+  @media (max-width:640px){ .hero-chips{ display:none; } }
+
+  table.claims td:first-child{ font-style:italic; color:var(--text-dark); width:38%; }
+
+  /* generic lab grid */
+  .two-col{ display:grid; grid-template-columns:1fr 1fr; gap:1.1rem; }
+  .two-col > *{ min-width:0; }
+  .two-col.stacked{ grid-template-columns:1fr; }
+  @media (max-width:760px){ .two-col{ grid-template-columns:1fr; } }
+  .panel{ background:rgba(255,255,255,0.03); border:1px solid var(--border-ink); padding:1rem 1.1rem; min-width:0; }
+  .panel-h{ font-family:var(--mono); font-size:0.6rem; text-transform:uppercase; letter-spacing:0.08em; color:rgba(200,200,212,0.55); margin-bottom:0.6rem; }
+  .ctrl-label{ font-family:var(--mono); font-size:0.6rem; text-transform:uppercase; letter-spacing:0.08em; color:rgba(200,200,212,0.55); margin:0.2rem 0 0.4rem; display:flex; justify-content:space-between; }
+  .ctrl-label b{ color:var(--gold); font-weight:500; }
+  input[type=range]{ width:100%; accent-color:var(--gold); }
+  .lab input[type=text]{ width:100%; font-family:var(--mono); font-size:0.85rem; background:rgba(255,255,255,0.04); border:1px solid var(--border-ink); color:var(--text-bright); padding:0.6rem 0.8rem; }
+  .lab input[type=text]:focus{ outline:none; border-color:rgba(201,168,76,0.5); }
+
+  /* probability bars */
+  .pbars{ display:flex; flex-direction:column; gap:0.35rem; }
+  .pbar{ display:grid; grid-template-columns:5.6rem 1fr 3.4rem; gap:0.6rem; align-items:center; cursor:pointer; padding:0.15rem 0.2rem; border:1px solid transparent; }
+  .pbar:hover{ border-color:var(--border-ink); }
+  .pbar:focus-visible{ outline:2px solid var(--gold); outline-offset:1px; }
+  .pbar .tok{ font-family:var(--mono); font-size:0.72rem; color:var(--text-bright); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pbar .track{ height:14px; background:rgba(255,255,255,0.04); position:relative; }
+  .pbar .fill{ position:absolute; left:0; top:0; bottom:0; background:var(--steel); transition:width .3s var(--ease); }
+  .pbar.top .fill{ background:var(--gold); }
+  .pbar .pct{ font-family:var(--mono); font-size:0.66rem; color:rgba(200,200,212,0.75); text-align:right; }
+  .pbar.masked .tok{ color:rgba(200,200,212,0.35); text-decoration:line-through; }
+  .pbar.masked .fill{ background:rgba(212,149,107,0.35); width:0 !important; }
+  .pbar.masked .pct{ color:var(--amber); }
+
+  /* status badge */
+  .badge{ display:inline-block; font-family:var(--mono); font-size:0.62rem; letter-spacing:0.06em; text-transform:uppercase; padding:0.2rem 0.55rem; border:1px solid; }
+  .badge.live{ color:var(--teal); border-color:var(--teal); }
+  .badge.complete{ color:var(--ink); background:var(--gold); border-color:var(--gold); }
+  .badge.dead{ color:var(--amber); border-color:var(--amber); }
+  .chips{ display:flex; flex-wrap:wrap; gap:0.3rem; }
+  .chip2{ font-family:var(--mono); font-size:0.66rem; padding:0.16rem 0.45rem; border:1px solid var(--border-ink); color:var(--text-on-ink); background:rgba(255,255,255,0.03); }
+  .chip2.term{ border-color:rgba(107,141,173,0.6); }
+  .chip2.rem{ border-style:dashed; border-color:var(--gold); color:var(--gold); }
+  .chip2.exp{ border-color:rgba(91,166,138,0.6); color:var(--teal); }
+  .kv-line{ font-size:0.8rem; color:rgba(200,200,212,0.8); margin:0.5rem 0; line-height:1.55; }
+  .kv-line b{ color:var(--text-bright); font-weight:600; }
+
+  /* decoding simulator */
+  .outbox{ font-family:var(--mono); font-size:0.82rem; background:rgba(255,255,255,0.04); border:1px solid var(--border-ink); padding:0.75rem 0.9rem; min-height:2.8rem; line-height:1.9; white-space:pre-wrap; word-break:break-all; color:var(--text-bright); }
+  .outbox .t{ padding:0.08rem 0.05rem; border-bottom:2px solid rgba(107,141,173,0.7); margin-right:1px; }
+  .outbox .t:nth-child(even){ border-bottom-color:rgba(91,166,138,0.7); }
+  .outbox .t.nl{ color:var(--amber); }
+  .outbox .caret{ display:inline-block; width:7px; height:1em; background:var(--gold); vertical-align:-2px; animation:blink 1s infinite; }
+  table.cands{ width:100%; border-collapse:collapse; font-family:var(--mono); font-size:0.7rem; margin-top:0.6rem; }
+  table.cands th{ font-size:0.56rem; color:rgba(200,200,212,0.5); text-transform:uppercase; letter-spacing:0.06em; font-weight:400; text-align:left; padding:0.3rem 0.4rem; border-bottom:1px solid var(--border-ink); }
+  table.cands td{ padding:0.3rem 0.4rem; color:var(--text-on-ink); border-bottom:1px solid rgba(255,255,255,0.04); white-space:nowrap; }
+  table.cands tr.pick td{ background:var(--gold); color:var(--ink); }
+  table.cands tr.mask td{ color:rgba(200,200,212,0.35); }
+  table.cands tr.mask td.v{ color:var(--amber); }
+  table.cands td.v{ color:var(--teal); }
+
+  /* misalignment figure */
+  .align-fig{ overflow-x:auto; }
+  .align-row{ display:flex; gap:3px; margin:0.35rem 0; align-items:stretch; }
+  .align-row .lbl{ font-family:var(--mono); font-size:0.58rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-light); width:6.5rem; flex-shrink:0; display:flex; align-items:center; }
+  .seg{ font-family:var(--mono); font-size:0.78rem; padding:0.3rem 0; text-align:center; border:1px solid var(--border-paper); background:var(--paper); color:var(--text-dark); flex-shrink:0; }
+  .seg small{ display:block; font-size:0.56rem; color:var(--text-light); }
+  .seg.tk{ border-color:rgba(107,141,173,0.6); }
+  .seg.tm{ border-color:rgba(201,168,76,0.7); background:var(--gold-glow); }
+
+  /* picard ladder */
+  table.ladder{ width:100%; border-collapse:collapse; font-size:0.76rem; margin-top:0.9rem; }
+  table.ladder th{ font-family:var(--mono); font-size:0.56rem; text-transform:uppercase; letter-spacing:0.06em; color:rgba(200,200,212,0.5); font-weight:400; text-align:left; padding:0.4rem; border-bottom:1px solid var(--border-ink); }
+  table.ladder td{ padding:0.5rem 0.4rem; border-bottom:1px solid rgba(255,255,255,0.05); vertical-align:top; color:rgba(200,200,212,0.8); }
+  table.ladder td.q{ font-family:var(--mono); font-size:0.7rem; color:var(--text-bright); }
+  table.ladder td.st{ white-space:nowrap; font-family:var(--mono); font-size:0.66rem; }
+  .ok{ color:var(--teal); } .no{ color:var(--amber); }
+  .beam-fig{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:1rem; }
+  .beam-col{ border:1px solid var(--border-paper); background:var(--paper); padding:0.7rem; }
+  .beam-col .h{ font-family:var(--mono); font-size:0.6rem; color:var(--text-light); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:0.45rem; }
+  .beam-tok{ display:flex; justify-content:space-between; font-family:var(--mono); font-size:0.74rem; padding:0.3rem 0.5rem; margin:0.2rem 0; border:1px solid var(--border-paper); background:var(--paper-white); }
+  .beam-tok.acc{ border-color:var(--teal); } .beam-tok.rej{ border-color:var(--amber); color:var(--text-light); text-decoration:line-through; }
+  .beam-tok.skip{ color:var(--text-light); border-style:dashed; }
+
+  /* DFA + mask store */
+  .dfa-chain{ display:flex; flex-wrap:wrap; gap:0.5rem; align-items:center; margin:0.4rem 0 0.8rem; }
+  .dfa-box{ border:1px solid var(--border-ink); padding:0.45rem 0.6rem; }
+  .dfa-box .n{ font-family:var(--mono); font-size:0.62rem; color:var(--gold); margin-bottom:0.3rem; }
+  .dfa-states{ display:flex; gap:0.3rem; }
+  .st-dot{ font-family:var(--mono); font-size:0.6rem; width:1.9rem; height:1.9rem; border-radius:50%; border:1px solid rgba(200,200,212,0.35); display:flex; align-items:center; justify-content:center; color:rgba(200,200,212,0.7); }
+  .st-dot.acc{ box-shadow:inset 0 0 0 2px rgba(91,166,138,0.6); }
+  .st-dot.cur{ background:var(--gold); color:var(--ink); border-color:var(--gold); }
+  .tokgrid{ display:flex; flex-wrap:wrap; gap:0.35rem; }
+  .tg{ font-family:var(--mono); font-size:0.72rem; padding:0.3rem 0.55rem; border:1px solid; cursor:pointer; background:transparent; }
+  .tg.y{ color:var(--teal); border-color:rgba(91,166,138,0.6); background:rgba(91,166,138,0.08); }
+  .tg.n{ color:rgba(200,200,212,0.4); border-color:rgba(255,255,255,0.1); text-decoration:line-through; }
+  .tg.sel{ outline:2px solid var(--gold); outline-offset:1px; }
+  .tg:focus-visible{ outline:2px solid var(--gold); }
+  .tg .b{ font-size:0.55rem; margin-left:0.35rem; padding:0 0.25rem; border:1px solid currentColor; text-decoration:none; display:inline-block; }
+  .mstore{ width:100%; border-collapse:collapse; font-family:var(--mono); font-size:0.64rem; margin-top:0.6rem; }
+  .mstore td, .mstore th{ padding:0.3rem 0.35rem; border-bottom:1px solid rgba(255,255,255,0.05); text-align:left; color:rgba(200,200,212,0.75); font-weight:400; }
+  .mstore th{ font-size:0.54rem; text-transform:uppercase; color:rgba(200,200,212,0.45); letter-spacing:0.05em; }
+  .bits{ display:flex; gap:2px; }
+  .bit{ width:9px; height:12px; background:rgba(255,255,255,0.08); }
+  .bit.on{ background:var(--teal); }
+  .seq-toggle{ display:flex; flex-wrap:wrap; gap:0.4rem; }
+
+  /* PDA stack */
+  .stack{ display:flex; flex-direction:column-reverse; gap:3px; min-height:6rem; justify-content:flex-start; }
+  .frame{ font-family:var(--mono); font-size:0.7rem; padding:0.4rem 0.6rem; border:1px solid var(--border-ink); background:rgba(255,255,255,0.04); color:var(--text-on-ink); display:flex; justify-content:space-between; }
+  .frame.top{ border-color:var(--gold); color:var(--text-bright); background:rgba(201,168,76,0.12); }
+  .frame small{ color:rgba(200,200,212,0.5); }
+  .ratio{ height:10px; display:flex; margin:0.6rem 0 0.3rem; background:rgba(255,255,255,0.05); }
+  .ratio div{ height:100%; transition:width .3s var(--ease); }
+
+  /* itergen */
+  .codepane{ font-family:var(--mono); font-size:0.72rem; background:rgba(255,255,255,0.03); border:1px solid var(--border-ink); padding:0.6rem 0; line-height:1.7; overflow-x:auto; }
+  .codepane div{ padding:0 0.8rem; white-space:pre; color:rgba(200,200,212,0.6); border-left:3px solid transparent; }
+  .codepane div.on{ background:rgba(201,168,76,0.14); color:var(--text-bright); border-left-color:var(--gold); }
+  .codepane .cm{ color:rgba(200,200,212,0.38); }
+  .sym{ border-bottom:2px solid; padding-bottom:1px; }
+  .sym.tab{ border-color:var(--gold); }
+  .sym.col{ border-color:var(--teal); }
+  .sym.bad{ border-color:var(--amber); color:var(--amber); }
+  .kv{ display:flex; flex-wrap:wrap; gap:3px; margin-top:0.4rem; }
+  .kvc{ font-family:var(--mono); font-size:0.6rem; padding:0.2rem 0.35rem; border:1px solid rgba(107,141,173,0.6); color:var(--text-on-ink); }
+  .kvc.p{ border-color:rgba(255,255,255,0.15); color:rgba(200,200,212,0.45); }
+  .kvc.cut{ border-style:dashed; border-color:var(--amber); color:var(--amber); text-decoration:line-through; opacity:0.7; }
+  .trace{ font-family:var(--mono); font-size:0.66rem; color:rgba(200,200,212,0.75); line-height:1.75; white-space:pre; overflow-x:auto; }
+
+  /* quiz */
+  .quiz-q{ padding:1rem 0; border-bottom:1px solid var(--border-ink); }
+  .quiz-q:last-child{ border-bottom:none; }
+  .quiz-q .qt{ font-size:0.88rem; color:var(--text-bright); margin-bottom:0.6rem; line-height:1.5; }
+  .quiz-q .opts{ display:flex; flex-direction:column; gap:0.35rem; }
+  .opt{ text-align:left; font-family:var(--sans); font-size:0.8rem; padding:0.5rem 0.75rem; border:1px solid var(--border-ink); background:rgba(255,255,255,0.02); color:var(--text-on-ink); cursor:pointer; }
+  .opt:hover{ border-color:rgba(201,168,76,0.5); }
+  .opt:focus-visible{ outline:2px solid var(--gold); outline-offset:1px; }
+  .opt.right{ border-color:var(--teal); color:var(--text-bright); background:rgba(91,166,138,0.12); }
+  .opt.wrong{ border-color:var(--amber); color:rgba(200,200,212,0.6); }
+  .quiz-q .fb{ font-size:0.8rem; color:rgba(200,200,212,0.8); margin-top:0.55rem; line-height:1.55; min-height:0; }
+  .score{ font-family:var(--serif); font-size:1.6rem; font-weight:700; color:var(--gold); }
+
+  .pipe-host{ overflow-x:auto; }
+  .pipe{ width:100%; min-width:560px; height:auto; display:block; }
+  .pipe .bx{ fill:rgba(255,255,255,0.035); stroke-width:1.1; }
+  .pipe .t{ font-family:var(--mono); font-size:10.5px; fill:var(--text-bright); text-anchor:middle; }
+  .pipe .s{ font-family:var(--mono); font-size:8.5px; fill:rgba(200,200,212,0.6); text-anchor:middle; }
+  .pipe .ar{ fill:none; stroke-width:1.1; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="topbar-name">Aakash <span>Vanmali</span></div>
+    <div class="topbar-links">
+      <a href="index.html">Writing</a>
+      <a href="../index.html">Portfolio</a>
+    </div>
+  </div>
+</div>
+
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-eyebrow">Notebook · Reliable Code Generation</div>
+    <h1>Making Every Token Parse</h1>
+    <p class="hero-dek">Study notes on grammar-constrained decoding — how PICARD, SynCode, XGrammar and IterGen steer a language model one token at a time so its output always fits a grammar, with no extra training.</p>
+    <div class="hero-meta">Logits &amp; masks · Grammars · Incremental parsing · DFA mask stores · Pushdown automata · Backtracking</div>
+  </div>
+  <div class="hero-chips" aria-hidden="true"><span>math</span><span class="x">_area</span><span>_sqrt</span><span>(</span><span>3</span><span class="x">\n</span><span>)</span></div>
+</div>
+
+<div class="content">
+  <article>
+
+    <p class="lead">A language model writing code is a bit like a fluent typist working with their eyes closed. It's fast, it's usually right, and every so often it forgets to close a bracket or invents a function that doesn't exist. Grammar-constrained decoding is the idea of watching over its shoulder, one keystroke at a time, and quietly taking away the keys that would make the program impossible to parse.</p>
+
+    <p>I'm learning this from four papers: <a href="https://aclanthology.org/2021.emnlp-main.779/" target="_blank">PICARD</a> (2021), <a href="https://arxiv.org/abs/2403.01632" target="_blank">SynCode</a> (2024, published 2025), <a href="https://arxiv.org/abs/2411.15100" target="_blank">XGrammar</a> (2024) and <a href="https://arxiv.org/abs/2410.07295" target="_blank">IterGen</a> (2025). These notes start from zero — how a model picks a word at all — and build up one stage at a time. Each stage answers the question the previous one leaves open, and there are eight labs to play with along the way.</p>
+
+    <h3 class="sub">The summary I started with, and what I had to correct</h3>
+
+    <p>Before reading the papers properly, my one-paragraph understanding was: <em>during decoding, keep a Python parser's state and mask invalid tokens at each step. That guarantees syntactically valid output with zero extra training. XGrammar made this 100× faster. IterGen added backtracking — if semantic errors are detected, undo and regenerate from a checkpoint.</em> That's a good skeleton. Reading carefully, each sentence needed a small but important correction:</p>
+
+    <div class="table-wrap"><table class="claims">
+      <thead><tr><th>What I thought</th><th>More precisely</th></tr></thead>
+      <tbody>
+        <tr><td>"Maintain a Python parser state"</td><td>Any language with a grammar works. PICARD was built for SQL. SynCode covers JSON, SQL, Go and a large subset of Python.</td></tr>
+        <tr><td>"Guarantees syntactically valid output"</td><td>It guarantees every <em>partial</em> output can still become valid. If generation hits its token limit first, the output can still be cut off mid-program.</td></tr>
+        <tr><td>"Zero additional training"</td><td>True — but you need the model's raw next-token scores at every step, which means open-weight models or APIs that offer a constrained mode.</td></tr>
+        <tr><td>"XGrammar made this 100× faster"</td><td>Up to 100× faster at <em>computing the mask</em>, compared with earlier grammar engines. The model itself isn't faster; the constraint stops being the bottleneck.</td></tr>
+        <tr><td>"IterGen detects semantic errors"</td><td>You write the checks ("is this table in the database?"). IterGen gives you a clean way to stop at a grammar symbol, inspect it, and undo exactly that piece.</td></tr>
+      </tbody>
+    </table></div>
+
+    <p>Each of those corrections gets explained properly below. Here's the route:</p>
+
+    <ol class="route">
+      <li><span>01</span>How a language model writes, one token at a time</li>
+      <li><span>02</span>Why models write broken code, and three ways to respond</li>
+      <li><span>03</span>Grammars from zero: what "valid" means</li>
+      <li><span>04</span>The core loop: mask, pick, append, repeat</li>
+      <li><span>05</span>The awkward part: tokens aren't grammar symbols</li>
+      <li><span>06</span>PICARD (2021): check the model's favourites</li>
+      <li><span>07</span>SynCode (2025): precompute almost everything</li>
+      <li><span>08</span>XGrammar (2024): making nested grammars fast</li>
+      <li><span>09</span>IterGen (2025): undo when the meaning is wrong</li>
+      <li><span>10</span>Putting it together — and what none of them guarantee</li>
+    </ol>
+
+    <!-- ================= 01 ================= -->
+    <div class="section-header">
+      <span class="section-number">01</span>
+      <span class="section-title">How a language model writes, one token at a time</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>Everything in this topic happens in one small moment that repeats thousands of times: the model choosing its next token. So that's where to start.</p>
+
+    <p><strong>Tokens.</strong> A model doesn't write letters or whole words. It writes <strong>tokens</strong>: chunks of text from a fixed list called the <strong>vocabulary</strong>. Common words get their own token (<code>def</code>, <code>return</code>); rare ones are split into pieces (<code>math</code> + <code>_sqrt</code>). Vocabularies are large — Llama 3's has about 128,000 tokens.</p>
+
+    <p><strong>Logits.</strong> Given everything written so far, the model outputs one score per vocabulary entry: a <strong>logit</strong>. Higher means "more likely next". The <strong>softmax</strong> function turns those scores into probabilities that add up to 1:</p>
+
+    <div class="formula-block"><span class="name">Softmax with temperature</span>p(token i) = exp(zᵢ / T) / Σⱼ exp(zⱼ / T)<span class="sub">zᵢ is token i's logit · T is the temperature: below 1 sharpens the distribution, above 1 flattens it.</span></div>
+
+    <p><strong>Decoding.</strong> The rule for turning probabilities into a choice is called the <strong>decoding strategy</strong>. <em>Greedy</em> decoding always takes the most likely token. <em>Sampling</em> draws one at random according to the probabilities. <em>Beam search</em> keeps the k best partial outputs (the "beam") alive in parallel and extends each one. The chosen token is appended to the text, the text goes back into the model, and the loop repeats until the model emits a special <strong>end-of-sequence</strong> token (EOS) or hits a length limit. Because each token is chosen based on the ones before it, this is called <strong>autoregressive</strong> generation.</p>
+
+    <h3 class="sub">The one trick every paper here uses: masking</h3>
+
+    <p>If a token must never be chosen, set its logit to −∞. Then exp(−∞) = 0, so its probability is exactly zero, and the remaining probabilities are rescaled to sum to 1 again. This is a <strong>mask</strong>: a yes/no flag per vocabulary entry.</p>
+
+    <div class="formula-block"><span class="name">Masked distribution</span>p′(i) = mᵢ · p(i) / Σⱼ mⱼ · p(j)&nbsp;&nbsp;&nbsp;&nbsp;<span class="case">mᵢ = 1 if token i is allowed, 0 if not</span></div>
+
+    <p>Try it below. The model has written <code>total = price *</code> and is choosing the next token. Click any bar to mask it and watch its probability flow to the others in proportion. Drag the temperature to see how confident the model is.</p>
+
+    <!-- LAB 1 -->
+    <div class="lab" id="lab1">
+      <div class="lab-head">
+        <div class="lab-title"><span class="dot"></span> Next-token lab — logits, softmax, masks</div>
+        <div class="lab-sub">click a bar to mask it</div>
+      </div>
+      <div class="outbox" style="margin-bottom:1rem">total = price *<span class="caret"></span></div>
+      <div class="ctrl-label">Temperature <b id="l1T">1.0</b></div>
+      <input type="range" id="l1Temp" min="2" max="30" value="10" aria-label="Temperature">
+      <div class="pbars" id="l1Bars" style="margin-top:1rem"></div>
+      <div class="lab-btns" style="margin-top:0.9rem"><button class="lab-btn ghost" id="l1Reset">Unmask all</button></div>
+      <div class="lab-info active" id="l1Info"></div>
+    </div>
+
+    <p>That's the entire mechanism. Every paper in these notes produces a mask at every step and hands it to an ordinary decoder. They differ only in <em>how they decide which tokens to mask</em> — and in how fast they can decide it for 128,000 tokens, thousands of times per answer.</p>
+
+    <details class="check">
+      <summary>Check: after masking, does the most likely remaining token change?</summary>
+      <p>No. Masking removes options and rescales the rest by the same factor, so the order of the survivors never changes. What changes is which token is on top if you masked the previous favourite.</p>
+    </details>
+
+    <!-- ================= 02 ================= -->
+    <div class="section-header">
+      <span class="section-number">02</span>
+      <span class="section-title">Why models write broken code, and three ways to respond</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>Language models are trained to produce likely text, not valid programs. Most of the time those overlap. When they don't, you get output a computer refuses to run. The papers give concrete numbers. A fine-tuned T5-3B model wrote SQL that failed with an execution error 12% of the time (PICARD). Asked for JSON, Llama-2-7B-chat produced invalid JSON for 98 of 100 prompts — mostly by wrapping it in chatty prose — and still 41 of 100 when told explicitly to output only JSON (SynCode).</p>
+
+    <p>There are three broad responses:</p>
+
+    <div class="table-wrap"><table>
+      <thead><tr><th>Approach</th><th>How</th><th>Problem</th></tr></thead>
+      <tbody>
+        <tr><td class="metric-name">Ask better</td><td>Prompting, fine-tuning on more examples</td><td>Helps, but guarantees nothing</td></tr>
+        <tr><td class="metric-name">Filter afterwards</td><td>Generate many outputs, keep the valid ones</td><td>Wasteful: earlier SQL systems needed beams of 16–100 candidates</td></tr>
+        <tr><td class="metric-name">Steer during generation</td><td>Reject an invalid token the moment it's proposed</td><td>Needs a fast, exact validity check at every step</td></tr>
+      </tbody>
+    </table></div>
+
+    <p>All four papers take the third road. The idea that makes it work is one I had to sit with for a while:</p>
+
+    <div class="callout gold"><strong>Keep the prefix alive.</strong> Call a partial output <em>alive</em> if some continuation could still turn it into a valid program. <code>print(len(x</code> is alive; <code>print(len x))</code> is dead — no ending can rescue it. If you only ever allow tokens that keep the output alive, and only allow EOS when the output is complete, then whatever finishes is valid. Nothing is ever repaired after the fact; a dead end is simply never entered.</div>
+
+    <p>Formally, the papers call the set of alive strings the <strong>prefix language</strong> of the grammar. A GPS analogy helped me: it doesn't wait until you've arrived somewhere wrong; it refuses every turn that leaves no route to the destination.</p>
+
+    <!-- ================= 03 ================= -->
+    <div class="section-header">
+      <span class="section-number">03</span>
+      <span class="section-title">Grammars from zero: what "valid" means</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>"Alive" and "valid" need a precise definition, and that's what a <strong>grammar</strong> provides: a set of rules that describes exactly which strings belong to a language. I'll use the tiny calculator language from the SynCode paper's own walkthrough, because it's small enough to hold in your head:</p>
+
+    <div class="codeblk"><span class="c"># A tiny calculator language, written in the style SynCode uses (Lark EBNF)</span>
+<span class="k">expr</span>   : term ((<span class="s">"+"</span> | <span class="s">"-"</span>) term)*
+<span class="k">term</span>   : factor ((<span class="s">"*"</span> | <span class="s">"/"</span>) factor)*
+<span class="k">factor</span> : INT | FLOAT | <span class="s">"("</span> expr <span class="s">")"</span> | FUNC <span class="s">"("</span> expr <span class="s">")"</span>
+
+<span class="d">FUNC</span>   : <span class="s">"math_exp"</span> | <span class="s">"math_sqrt"</span> | <span class="s">"math_sin"</span> | <span class="s">"math_cos"</span>
+<span class="d">INT</span>    : /[0-9]+/
+<span class="d">FLOAT</span>  : /[0-9]+\.[0-9]+/
+<span class="c"># spaces are ignored</span></div>
+
+    <p>Some vocabulary, all of which comes back later:</p>
+
+    <div class="table-wrap"><table>
+      <thead><tr><th>Term</th><th>Meaning</th><th>In the example</th></tr></thead>
+      <tbody>
+        <tr><td class="metric-name">Terminal</td><td>An actual piece of text the language is built from. Often defined by a pattern (a <em>regular expression</em>).</td><td><code>INT</code>, <code>FLOAT</code>, <code>FUNC</code>, <code>(</code>, <code>+</code></td></tr>
+        <tr><td class="metric-name">Non-terminal</td><td>A named structure built from other symbols.</td><td><code>expr</code>, <code>term</code>, <code>factor</code></td></tr>
+        <tr><td class="metric-name">Rule (production)</td><td>"This non-terminal can be made of these symbols."</td><td><code>factor : "(" expr ")"</code></td></tr>
+        <tr><td class="metric-name">Context-free grammar</td><td>Every rule has one non-terminal on the left, usable anywhere regardless of surroundings. Most programming languages are (mostly) context-free.</td><td>All of the above</td></tr>
+        <tr><td class="metric-name">Lexer</td><td>Splits raw characters into terminals.</td><td><code>2.27</code> → FLOAT</td></tr>
+        <tr><td class="metric-name">Parser</td><td>Checks the terminals fit the rules, building structure.</td><td>FUNC ( INT ) → factor</td></tr>
+      </tbody>
+    </table></div>
+
+    <p>Note one rule in particular: <code>"(" expr ")"</code>. Brackets can nest to any depth, so checking them means <em>counting</em> how many are open. A regular expression can't do that — it has no memory beyond a fixed number of states. Grammars that allow nesting need a stack. Remember that; it's the whole story of Stage 08.</p>
+
+    <p>Type into the lab below. It runs a real checker for this grammar and tells you whether what you've typed is <strong>dead</strong>, <strong>alive</strong> (a valid prefix), or <strong>complete</strong> — and which terminals may come next.</p>
+
+    <!-- LAB 2 -->
+    <div class="lab" id="lab2">
+      <div class="lab-head">
+        <div class="lab-title"><span class="dot"></span> Prefix lab — dead, alive or complete?</div>
+        <div class="lab-sub">type, or pick an example</div>
+      </div>
+      <div class="lab-btns" id="l2Presets"></div>
+      <input type="text" id="l2In" spellcheck="false" aria-label="Expression to check" value="math_sqrt(3) * (2.27">
+      <div class="two-col" style="margin-top:1rem">
+        <div class="panel">
+          <div class="panel-h">Status</div>
+          <div id="l2Status"></div>
+          <div class="kv-line" id="l2Why"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-h">Lexer output → what may come next</div>
+          <div class="chips" id="l2Lex"></div>
+          <div class="kv-line" style="margin-top:0.8rem">Open brackets: <b id="l2Depth">0</b></div>
+          <div class="chips" id="l2Next"></div>
+        </div>
+      </div>
+    </div>
+
+    <p>Two things to notice. First, <code>math_sq</code> is alive even though it isn't a word yet — it could still grow into <code>math_sqrt</code>. That unfinished tail is called the <strong>remainder</strong>, and it matters a lot in Stage 07. Second, a complete expression is usually still alive too: <code>2 + 3</code> is valid, but so is everything you could append to it.</p>
+
+    <!-- ================= 04 ================= -->
+    <div class="section-header">
+      <span class="section-number">04</span>
+      <span class="section-title">The core loop: mask, pick, append, repeat</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>Put Stages 01–03 together and you have grammar-constrained decoding:</p>
+
+    <div class="codeblk"><span class="k">def</span> <span class="f">constrained_generate</span>(model, prompt, grammar, max_tokens):
+    text = <span class="s">""</span>
+    <span class="k">for</span> _ <span class="k">in</span> <span class="f">range</span>(max_tokens):
+        logits = <span class="f">model</span>(prompt + text)              <span class="c"># one score per vocabulary token</span>
+        mask = [grammar.<span class="f">alive</span>(text + tok) <span class="k">for</span> tok <span class="k">in</span> vocab]   <span class="c"># the expensive line</span>
+        mask[EOS] = grammar.<span class="f">complete</span>(text)
+        logits[<span class="k">not</span> mask] = -inf
+        tok = <span class="f">decode</span>(logits)                         <span class="c"># greedy, sampling, beam: any works</span>
+        <span class="k">if</span> tok == EOS: <span class="k">break</span>
+        text += tok
+    <span class="k">return</span> text</div>
+
+    <p>The model is untouched — no retraining, no new weights. Only the decoder changes. Below, a toy model is asked for the area of an equilateral triangle with side 2.27, in the calculator language. Its scores are scripted but realistic: it likes to invent a <code>math_area</code> function and to drift into a new line. Run it with the constraint off, then on.</p>
+
+    <!-- LAB 3 -->
+    <div class="lab" id="lab3">
+      <div class="lab-head">
+        <div class="lab-title"><span class="dot"></span> Decoding lab — the same model, with and without a grammar</div>
+        <div class="lab-sub">greedy decoding · toy vocabulary</div>
+      </div>
+      <div class="lab-btns">
+        <span class="lab-label">Grammar constraint</span>
+        <button class="lab-btn" id="l3Off">Off</button>
+        <button class="lab-btn on" id="l3On">On</button>
+        <span style="flex:1"></span>
+        <button class="lab-btn on" id="l3Step">Next token →</button>
+        <button class="lab-btn ghost" id="l3Run">Run to end</button>
+        <button class="lab-btn ghost" id="l3Reset">Reset</button>
+      </div>
+      <div class="kv-line">Prompt: <b>"Area of an equilateral triangle with side 2.27?"</b> &nbsp;Answer:</div>
+      <div class="outbox" id="l3Out"></div>
+      <div class="kv-line" id="l3Status"></div>
+      <div style="overflow-x:auto"><table class="cands" id="l3Cands"></table></div>
+      <div class="lab-info active" id="l3Info"></div>
+    </div>
+
+    <p>With the constraint on, the model's favourite <code>_area</code> is masked after <code>math</code>, so its second choice <code>_sqrt</code> wins. Later, the newline it keeps wanting is masked too, and EOS only becomes available once the expression is complete. The result is <code>math_sqrt(3) / 4 * 2.27 * 2.27</code> — valid, and in this case also the right formula (√3/4 · s²).</p>
+
+    <p>Now look at the line in the lab that says how many tokens were checked. Here the vocabulary has 19 entries and each check re-parses the whole output. A real model has around 128,000, generating a token every few milliseconds. Checking every token by re-parsing everything is hopeless at that scale. That speed problem is what Stages 06–08 are about. But first, one more complication.</p>
+
+    <!-- ================= 05 ================= -->
+    <div class="section-header">
+      <span class="section-number">05</span>
+      <span class="section-title">The awkward part: tokens aren't grammar symbols</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>You might hope for a shortcut: ask the parser which terminal can come next, then allow only tokens of that terminal. It doesn't work, because model tokens and grammar terminals don't line up. The papers call this <strong>token misalignment</strong>.</p>
+
+    <div class="fig align-fig">
+      <div class="align-row"><span class="lbl">Model tokens</span>
+        <span class="seg tk" style="width:4.2rem">math</span><span class="seg tk" style="width:4.6rem">_sqrt</span><span class="seg tk" style="width:2.6rem">(3</span><span class="seg tk" style="width:2.6rem">) *</span><span class="seg tk" style="width:3.2rem">2.</span><span class="seg tk" style="width:2.6rem">27</span>
+      </div>
+      <div class="align-row"><span class="lbl">Terminals</span>
+        <span class="seg tm" style="width:8.95rem">math_sqrt<small>FUNC</small></span><span class="seg tm" style="width:1.2rem">(<small>(</small></span><span class="seg tm" style="width:1.25rem">3<small>INT</small></span><span class="seg tm" style="width:1.2rem">)<small>)</small></span><span class="seg tm" style="width:1.25rem">*<small>*</small></span><span class="seg tm" style="width:6.05rem">2.27<small>FLOAT</small></span>
+      </div>
+      <div class="fig-cap">One terminal can span several tokens (<code>math_sqrt</code>, <code>2.27</code>), and one token can span several terminals (<code>(3</code>, <code>) *</code>). The tokenization shown is illustrative.</div>
+    </div>
+
+    <p>Three consequences, each of which a real system has to handle:</p>
+
+    <p><strong>A token can start mid-terminal.</strong> After <code>math</code>, the next token must <em>continue</em> a FUNC name. So the question isn't "which terminal is next?" but "which token strings can extend the unfinished <code>math</code> into something valid?"</p>
+
+    <p><strong>A token can cross terminal boundaries.</strong> <code>) *</code> finishes one terminal and starts another. Checking it means knowing what may come <em>after</em> the next terminal, not just the next one.</p>
+
+    <p><strong>The last terminal can change type.</strong> SynCode's example is in Python: <code>ret</code> is an identifier, but one more token, <code>urn</code>, turns it into the keyword <code>return</code>. So the final piece of the output is never settled until something follows it. That's why Stage 03's remainder exists.</p>
+
+    <div class="callout">Misalignment is why early systems were either slow (checking every token by brute force) or occasionally wrong (approximating with terminals and missing edge cases). SynCode's main contribution is handling it exactly <em>and</em> fast. But the first big step came from PICARD.</div>
+
+    <!-- ================= 06 ================= -->
+    <div class="section-header">
+      <span class="section-number">06</span>
+      <span class="section-title">PICARD (2021): check the model's favourites</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>PICARD — "Parsing Incrementally for Constrained Auto-Regressive Decoding", by Scholak, Schucher and Bahdanau at ElementAI/ServiceNow — targeted text-to-SQL. The task: given a question in English and a database's schema (its tables and columns), write the SQL query that answers it. The benchmark was Spider, where the databases at test time are ones the model never saw in training.</p>
+
+    <p>PICARD's answer to the speed problem is pragmatic: <strong>don't check all 32,000 tokens; check only the model's top few.</strong> At each step, for each hypothesis in the beam, take the k most likely tokens (k = 2 in their headline results), run each through a fast incremental parser, and give a score of −∞ to any that fail. Everything outside the top k is dismissed automatically. "Incremental" means the parser keeps its state from the previous step and only processes the new token, rather than re-reading the whole query.</p>
+
+    <div class="fig">
+      <div class="beam-fig">
+        <div class="beam-col"><div class="h">Hypothesis 1 · "select name from"</div>
+          <div class="beam-tok acc"><span>singer</span><span>✓ checked</span></div>
+          <div class="beam-tok rej"><span>singers</span><span>✗ no such table</span></div>
+          <div class="beam-tok skip"><span>where</span><span>not checked</span></div>
+        </div>
+        <div class="beam-col"><div class="h">Hypothesis 2 · "select count("</div>
+          <div class="beam-tok rej"><span>from</span><span>✗ grammar</span></div>
+          <div class="beam-tok acc"><span>*</span><span>✓ checked</span></div>
+          <div class="beam-tok skip"><span>name</span><span>not checked</span></div>
+        </div>
+      </div>
+      <div class="fig-cap">Constrained beam search in the spirit of the paper's Figure 2, with k = 2: only each hypothesis's top two tokens are checked. Rejected and unchecked tokens both get a score of −∞.</div>
+    </div>
+
+    <h3 class="sub">Four levels of checking</h3>
+
+    <p>PICARD's parser can check at four increasing levels of strictness. Anything that passes a higher level passes every lower one:</p>
+
+    <div class="table-wrap"><table>
+      <thead><tr><th>Mode</th><th>What it checks</th></tr></thead>
+      <tbody>
+        <tr><td class="metric-name">Off</td><td>Nothing.</td></tr>
+        <tr><td class="metric-name">Lexing</td><td>Each word is a real SQL keyword, operator, literal, or a table/column name that exists in the schema. Order doesn't matter.</td></tr>
+        <tr><td class="metric-name">Parsing without guards</td><td>The query's grammar: clause order, missing <code>from</code>, and that <code>table.column</code> references actually match.</td></tr>
+        <tr><td class="metric-name">Parsing with guards</td><td>Scope: every column used must eventually come from a table in the <code>from</code> clause. Checked as early as possible, so bad hypotheses leave the beam fast.</td></tr>
+      </tbody>
+    </table></div>
+
+    <p>The last two are interesting: they already go beyond pure syntax into meaning, using the schema. Keep that in mind for IterGen. The lab below uses two real examples from the paper, plus three of my own, against two Spider schemas.</p>
+
+    <!-- LAB 4 -->
+    <div class="lab" id="lab4">
+      <div class="lab-head">
+        <div class="lab-title"><span class="dot"></span> PICARD lab — which hypotheses survive each mode?</div>
+        <div class="lab-sub">schemas from Spider</div>
+      </div>
+      <div class="kv-line"><b>dog_kennels:</b> professionals(professional_id, email_address, cell_number, home_phone, …) &nbsp;·&nbsp; <b>car_1:</b> car_makers(id, maker, full_name, country), model_list(model_id, maker, model)</div>
+      <div class="lab-btns" id="l4Modes"></div>
+      <div style="overflow-x:auto"><table class="ladder" id="l4Table"></table></div>
+      <div class="lab-info active" id="l4Info"></div>
+    </div>
+
+    <h3 class="sub">What PICARD achieved</h3>
+
+    <p>Invalid SQL nearly disappeared: with PICARD, only 2% of T5-3B's outputs were unusable (cases where beam search ended without any valid query), against 12% execution errors without it. Exact-match accuracy on Spider's development set rose from 69.9% to 74.1% for T5-3B (schema only), and from 57.2% to 65.8% for T5-Base. With database content as extra input, T5-3B + PICARD reached 75.5% on development and 71.9% on the hidden test set — state of the art at the time. A detail I liked: without PICARD, bigger beams didn't help these models at all; with it, they did, because the beam was no longer wasted on invalid queries. The cost was modest: 2.5 → 3.1 seconds per question at beam size 4 on an A100.</p>
+
+    <p>Checking at every step mattered. When PICARD only checked hypotheses as they finished, it helped much less — the gap closing only at large beam sizes.</p>
+
+    <div class="callout"><strong>The limits that motivated what came next.</strong> PICARD's parser is hand-written in Haskell for SQL, so a new language means writing a new parser. It was evaluated with T5 only. And it only checks the top k: if all k of a hypothesis's favourites are invalid, that hypothesis simply dies, even if a valid token sat at rank k + 1.</div>
+
+    <!-- ================= 07 ================= -->
+    <div class="section-header">
+      <span class="section-number">07</span>
+      <span class="section-title">SynCode (2025): precompute almost everything</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>SynCode (Ugare, Suresh, Kang, Misailovic and Singh at UIUC; arXiv 2024, TMLR 2025) asks for everything PICARD gave up: any grammar written as rules (in Lark EBNF), a mask over the <em>whole</em> vocabulary, proofs about what gets masked, and speed. Its key idea is that most of the work doesn't depend on what the model has written, so it can be done once, offline.</p>
+
+    <h3 class="sub">Step 1: split the output into "settled" and "remainder"</h3>
+
+    <p>At each step, an incremental parser processes the output. Everything up to the last terminal is <strong>settled</strong>: its terminal types can't change any more. The last piece, which might still grow or change type (Stage 05's <code>ret</code> → <code>return</code>), is the <strong>remainder</strong>. From the parser's state, SynCode reads off the <strong>accept sequences</strong>: short sequences of terminals that could legally come next. SynCode uses sequences of length 1 or 2, which an LR(1) parser's tables give directly.</p>
+
+    <p>Example from the paper: the output so far is <code>math_sqrt(3) * (2</code>. The settled part ends at <code>(</code>, the remainder is <code>2</code>, and accept sequences include [INT, )], [INT, *] and [FLOAT] — because the <code>2</code> might be a finished integer followed by something, or the start of a float.</p>
+
+    <h3 class="sub">Step 2: walk tiny machines instead of re-parsing</h3>
+
+    <p>Each terminal is a pattern, and each pattern can be turned into a <strong>DFA</strong> (deterministic finite automaton): a handful of states joined by arrows labelled with characters. Reading a string means following arrows. If there's no arrow for the next character, the string has failed. A state is <strong>live</strong> if some path from it still reaches an accepting state.</p>
+
+    <p>Now the question "is token t okay?" becomes: start the first terminal's DFA, feed it the remainder, then keep feeding it the token's characters. If you end in a live state — or finish this terminal and carry on into the next one in the accept sequence — the token is okay.</p>
+
+    <h3 class="sub">The insight: the DFA mask store</h3>
+
+    <p>Here's the part that made SynCode click for me. Once the remainder has been fed in, you're sitting in some DFA state q. Whether token t keeps the walk alive from q depends only on q, t and the next terminal — <em>not on the program at all</em>. So SynCode precomputes, offline, for every DFA state and every possible next terminal, a mask over the entire vocabulary. That table is the <strong>DFA mask store</strong>. At generation time, building the mask takes a few table lookups and a bitwise OR of the masks — a vectorized operation GPUs handle easily.</p>
+
+    <!-- LAB 5 -->
+    <div class="lab" id="lab5">
+      <div class="lab-head">
+        <div class="lab-title"><span class="dot"></span> SynCode lab — remainder, DFA walk, mask store</div>
+        <div class="lab-sub">click a token to see its walk</div>
+      </div>
+      <div class="lab-btns" id="l5Scen"></div>
+      <div class="kv-line" id="l5Ctx"></div>
+      <div class="ctrl-label">Accept sequences from the parser (toggle to see each one's mask)</div>
+      <div class="seq-toggle lab-btns" id="l5Seqs"></div>
+      <div class="dfa-chain" id="l5Dfa"></div>
+      <div class="ctrl-label">Vocabulary · green = allowed by the union of masks</div>
+      <div class="tokgrid" id="l5Toks"></div>
+      <div style="overflow-x:auto"><table class="mstore" id="l5Store"></table></div>
+      <div class="lab-info active" id="l5Info"></div>
+    </div>
+
+    <h3 class="sub">What SynCode guarantees</h3>
+
+    <p>SynCode proves two properties. <strong>Soundness:</strong> it never masks a token that could lead to a valid program. To guarantee this, it slightly over-approximates — it allows a token if its beginning completes the accept sequence, without checking what comes after. <strong>Completeness:</strong> every token it allows really is safe, provided the accept sequences are longer than the longest token. With the short sequences used in practice, it's sound but not quite complete — in their experiments, that was rare enough not to matter.</p>
+
+    <p>The offline cost is real but one-off: building the mask store for Python or Go took 6–10 minutes and up to 1.9 GB of memory for vocabularies of 32,000–51,000 tokens, reused for every later generation with that model and grammar.</p>
+
+    <h3 class="sub">What it achieved — and the 4% it didn't</h3>
+
+    <p>On JSON, SynCode produced zero syntax errors with both models tested. With Gemma-2-2B, the share of outputs matching their JSON schema rose from 41% to 99–100%. On Python and Go code completion, syntax errors fell by 96.07% on average. The leftover errors are the key to my first correction: <strong>every one was a program cut off at the maximum token limit.</strong> SynCode guarantees the partial output stays alive; it can't force the model to finish before it runs out of room.</p>
+
+    <p>Functional correctness barely moved: HumanEval pass@1 changed by at most a fraction of a point. Fixing syntax doesn't fix logic. On SQL, though, where many errors are syntactic, execution success for Llama-3.2-3B rose from 67.4% to 81.4% and accuracy from 28.6% to 34.9%.</p>
+
+    <div class="callout">Python has parts that aren't context-free — notably indentation. SynCode handles it with a separate tracker of which indentation levels are allowed next. It doesn't enforce meaning: a variable used before it's defined is still grammatical. That gap is IterGen's starting point.</div>
+
+    <!-- ================= 08 ================= -->
+    <div class="section-header">
+      <span class="section-number">08</span>
+      <span class="section-title">XGrammar (2024): making nested grammars fast</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>XGrammar (Dong, Ruan, Chen and colleagues, from CMU and the MLC-LLM project; arXiv 2024, MLSys 2025) is a systems paper. Its target is a modern serving setup where a GPU produces thousands of tokens per second across a batch, and the grammar engine — running on the CPU — becomes the bottleneck. To see why, we need the nesting problem from Stage 03.</p>
+
+    <h3 class="sub">From DFAs to pushdown automata</h3>
+
+    <p>A DFA has a fixed number of states, so it can't count unbounded nesting. A <strong>pushdown automaton</strong> (PDA) adds a <strong>stack</strong>. In XGrammar's design, each grammar rule becomes a small state machine. When a rule refers to another rule — an array containing an array — the PDA <em>pushes</em> the current position onto the stack and enters the inner rule. When the inner rule finishes, it <em>pops</em> back. The stack is the PDA's memory of "where I was before I went inside".</p>
+
+    <p>The trouble is that the stack can be arbitrarily deep, so there are infinitely many possible configurations. SynCode-style precomputation over every state is impossible. And checking 128,000 tokens against the full stack at every step is slow.</p>
+
+    <h3 class="sub">The insight: most tokens never look below the top</h3>
+
+    <p>XGrammar splits the vocabulary at each position into two groups:</p>
+
+    <p><strong>Context-independent tokens</strong> can be judged from the current position in the current rule alone. Inside a string, <code>abc</code> is fine and <code>]</code> is not — whatever is on the stack. <strong>Context-dependent tokens</strong> finish the current rule and continue into whatever rule is underneath, so their validity depends on the stack. Inside a string, <code>"]</code> closes the string and then a bracket — fine only if the enclosing structure is an array.</p>
+
+    <p>Context-independent tokens can be decided ahead of time for every position in every rule and stored. XGrammar calls this the <strong>adaptive token mask cache</strong> ("adaptive" because it stores whichever of the accepted or rejected lists is smaller). At runtime, only the context-dependent tokens get checked against the real stack. In the MLC team's words, more than 99% of a mask usually comes straight from the cache. Type into the lab to see the split.</p>
+
+    <!-- LAB 6 -->
+    <div class="lab" id="lab6">
+      <div class="lab-head">
+        <div class="lab-title"><span class="dot"></span> XGrammar lab — the stack, and which tokens need it</div>
+        <div class="lab-sub">grammar: nested arrays of lowercase strings</div>
+      </div>
+      <div class="codeblk" style="background:rgba(255,255,255,0.03);border-color:var(--border-ink);border-left-color:var(--gold);color:var(--text-on-ink);margin-top:0">array : "[" ( value ( "," value )* )? "]"
+value : array | string
+string: '"' /[a-z]*/ '"'</div>
+      <div class="lab-btns" id="l6Presets"></div>
+      <input type="text" id="l6In" spellcheck="false" aria-label="Partial output" value='[["ab"],["c'>
+      <div class="two-col" style="margin-top:1rem">
+        <div class="panel">
+          <div class="panel-h">PDA stack (top is highlighted)</div>
+          <div class="stack" id="l6Stack"></div>
+          <div class="kv-line" id="l6Status"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-h">Next-token check for a small vocabulary</div>
+          <div class="tokgrid" id="l6Toks"></div>
+          <div class="ratio" id="l6Ratio"></div>
+          <div class="kv-line" id="l6Sum"></div>
+        </div>
+      </div>
+      <div class="lab-info active" id="l6Info">Tokens marked <b>cache</b> are judged by the top rule alone and come from the precomputed table. Tokens marked <b>stack</b> close the current rule and need the full stack, checked at runtime. Click a token for details.</div>
+    </div>
+
+    <h3 class="sub">The rest of the engineering</h3>
+
+    <p>Four more ideas push the remaining cost down. <strong>Context expansion</strong> looks at what can follow each rule wherever it's used, which turns many context-dependent tokens into cacheable ones. A <strong>persistent execution stack</strong> stores the many possible stacks (ambiguous grammars produce several at once) as a shared tree, so splitting, merging and rolling back are cheap. Rolling back matters for speculative decoding, where some guessed tokens get thrown away. Compiler-style <strong>automaton optimizations</strong> — inlining small rules, merging equivalent states — shrink the PDA. And the grammar work for step t+1 runs on the CPU <em>while the GPU computes the model's forward pass</em>, so it hides behind time that's being spent anyway.</p>
+
+    <h3 class="sub">What "100× faster" actually means</h3>
+
+    <p>The paper reports up to 100× lower <em>per-token mask-generation latency</em> than existing grammar engines. In the MLC team's published benchmarks with Llama 3, mask generation was up to 3.5× faster on JSON-schema tasks and over 10× faster on general grammars. End to end in serving on an H100, it was up to 14× faster for JSON schema and up to 80× for general grammars, compared with other engines. The gap grows with batch size, because the GPU gets faster while a slow CPU-side engine doesn't. The headline goal is near-zero overhead: constrained generation at nearly the speed of unconstrained. XGrammar has since been integrated as a grammar backend into serving engines such as SGLang and vLLM.</p>
+
+    <!-- ================= 09 ================= -->
+    <div class="section-header">
+      <span class="section-number">09</span>
+      <span class="section-title">IterGen (2025): undo when the meaning is wrong</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>Everything so far guarantees <em>syntax</em>. But <code>SELECT COUNT(*) FROM employee_hire_evaluation</code> is perfectly grammatical SQL that fails because that table doesn't exist. Meaning-level mistakes like this are called <strong>semantic</strong> errors, and a grammar can't see them. A masking approach also has no way back: once a wrong table name is written, a left-to-right decoder can only keep going.</p>
+
+    <p>IterGen (Ugare, Gumaste, Suresh, Singh and Misailovic, ICLR 2025; built on SynCode) adds the missing direction. The natural fix — undo the last few tokens — is awkward, because tokens don't line up with anything meaningful (Stage 05). IterGen's idea is to <strong>navigate by grammar symbols instead</strong>. It offers three operations:</p>
+
+    <div class="table-wrap"><table>
+      <thead><tr><th>Call</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">forward(symbol, n)</td><td>Generate, grammar-constrained, until n more instances of that symbol are complete (e.g. one more <code>table_name</code>).</td></tr>
+        <tr><td class="mono">view(symbol)</td><td>Return every piece of the output that is an instance of that symbol, so your code can check it.</td></tr>
+        <tr><td class="mono">backward(symbol, n)</td><td>Erase the output back to just before the last n instances of that symbol.</td></tr>
+      </tbody>
+    </table></div>
+
+    <p>You write the semantic check yourself — that's my correction from the start. IterGen makes it cheap to act on the result. Step through the lab: it plays a text-to-SQL session in the style of the paper's case study.</p>
+
+    <!-- LAB 7 -->
+    <div class="lab" id="lab7">
+      <div class="lab-head">
+        <div class="lab-title"><span class="dot"></span> IterGen lab — forward, view, backward</div>
+        <div class="lab-sub">a sketch in the spirit of the paper's SQL case study</div>
+      </div>
+      <div class="kv-line"><b>Schema:</b> hiring(shop_id, employee_id, start_from, is_full_time) · employee(employee_id, name, age, city) · shop(shop_id, name, location) · evaluation(employee_id, year_awarded, bonus)</div>
+      <div class="kv-line"><b>Question:</b> How many full-time employees were hired starting on 2020-01-01?</div>
+      <div class="lab-btns">
+        <button class="lab-btn ghost" id="l7Back">← Back</button>
+        <button class="lab-btn on" id="l7Next">Next step →</button>
+        <button class="lab-btn ghost" id="l7Reset">Reset</button>
+        <span class="step-count" id="l7Count" style="margin-left:auto;font-family:var(--mono);font-size:0.64rem;color:rgba(200,200,212,0.6)"></span>
+      </div>
+      <div class="two-col stacked">
+        <div>
+          <div class="panel-h">Your program</div>
+          <div class="codepane" id="l7Code"></div>
+        </div>
+        <div>
+          <div class="panel-h">Output (underlines = symbol position map)</div>
+          <div class="outbox" id="l7Out"></div>
+          <div class="panel-h" style="margin-top:0.8rem">KV cache (one box per token)</div>
+          <div class="kv" id="l7Kv"></div>
+          <div class="panel-h" style="margin-top:0.8rem">Decoding trace</div>
+          <div class="trace" id="l7Trace"></div>
+        </div>
+      </div>
+      <div class="lab-info active" id="l7Info"></div>
+    </div>
+
+    <h3 class="sub">How it works underneath</h3>
+
+    <p><strong>The symbol position map.</strong> IterGen uses an LR parser, which builds structure bottom-up. It <em>shifts</em> terminals onto a stack, and when the top of the stack matches a rule's right-hand side, it <em>reduces</em> them into the rule's non-terminal. On every reduce, IterGen records where the new symbol starts (the first child's start) and ends (the last child's end). So it always knows which character span is which <code>table_name</code>, <code>column_name</code> or <code>sentence</code>.</p>
+
+    <p><strong>One extra token.</strong> An LR parser only reduces once it can see the next terminal — you don't know a name has ended until something follows it. So to stop exactly at the end of a symbol, IterGen generates one lookahead token, confirms the symbol is complete, then removes that token. Users never see this.</p>
+
+    <p><strong>The KV cache.</strong> When a Transformer generates, it stores the attention <em>keys</em> and <em>values</em> it computed for every earlier token so it doesn't recompute them — the KV cache. On <code>backward</code>, IterGen crops the cache at the right token position. Everything before the cut is reused; nothing is recomputed.</p>
+
+    <p><strong>The decoding trace and the recurrence penalty.</strong> Greedy decoding is deterministic: undo and regenerate, and you'd get the same wrong name again. IterGen keeps a tree of everything it has generated, and multiplies the score of previously chosen tokens by (1 − γ)<sup>α</sup>, where α is how many times that token has been backtracked. This pushes it down a different branch. The paper used γ = 0.7 for SQL, and found accuracy flat across γ = 0.3–1.0 on their ablation, with no penalty clearly worse.</p>
+
+    <h3 class="sub">What it achieved</h3>
+
+    <p>On Spider text-to-SQL, averaged over the nine models tested, accuracy went from 28.9% (unconstrained) to 35.2% (SynCode) to 41.6% (IterGen), and the share of queries that executed without error went from 50.3% to 63.7% to 75.8%. Average time per query was 0.81, 1.56 and 1.19 seconds respectively — IterGen was faster than SynCode on average; plausibly because, as the paper's error analysis shows, SynCode outputs sometimes ran on for many tokens after an invalid table name. In a privacy test, where models were prompted to reveal real email addresses from their training data, IterGen's "back up if this email exists in the leaked set" check took leaks from 45–67 per 100 prompts to zero for every model. On Vega-Lite chart specifications, accuracy rose by 17.8% over SynCode.</p>
+
+    <div class="callout"><strong>Limits.</strong> IterGen handles one sequence at a time, not batches. The recurrence penalty is a heuristic that can skew the first token after a backtrack. And a <code>max_iter</code> cap is needed, because a model might never find an acceptable answer. PICARD's guards were an early, SQL-only version of the same instinct — check meaning, not just form. IterGen makes it general and programmable.</div>
+
+    <!-- ================= 10 ================= -->
+    <div class="section-header">
+      <span class="section-number">10</span>
+      <span class="section-title">Putting it together — and what none of them guarantee</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>Lined up, the four papers form a clear progression: each solves the main limitation of the one before.</p>
+
+    <div class="table-wrap"><table>
+      <thead><tr><th>Paper</th><th>Question it answers</th><th>How it builds the mask</th><th>Main limit</th></tr></thead>
+      <tbody>
+        <tr><td class="metric-name">PICARD 2021</td><td>Can parsing during decoding fix invalid SQL?</td><td>Incremental parser checks the top-k tokens; the rest get −∞</td><td>SQL only, hand-written parser; may miss valid tokens below rank k</td></tr>
+        <tr><td class="metric-name">SynCode 2025</td><td>Can it work for any grammar, over the full vocabulary, provably?</td><td>LR parser → remainder + accept sequences → precomputed DFA mask store</td><td>Syntax only; can't force the model to finish in time</td></tr>
+        <tr><td class="metric-name">XGrammar 2024</td><td>Can nested grammars be enforced at serving speed?</td><td>Pushdown automaton; cache context-independent tokens, check the rest against the stack</td><td>Still syntax only</td></tr>
+        <tr><td class="metric-name">IterGen 2025</td><td>What if the output is grammatical but wrong?</td><td>SynCode masking, plus forward / view / backward by grammar symbol</td><td>You write the checks; single sequence; heuristic penalty</td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="lab">
+      <div class="lab-head">
+        <div class="lab-title"><span class="dot"></span> The whole picture in one loop</div>
+        <div class="lab-sub">one decoding step</div>
+      </div>
+      <div class="pipe-host">
+      <svg class="pipe" viewBox="0 0 700 300" role="img" aria-label="One decoding step: the model's logits and the grammar engine's mask combine, a token is picked and appended, the parser updates, and an optional semantic check can backtrack.">
+        <defs>
+          <marker id="gah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="rgba(200,200,212,0.6)"/></marker>
+          <marker id="gag" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#C9A84C"/></marker>
+          <marker id="gat" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#D4956B"/></marker>
+        </defs>
+        <rect class="bx" x="20" y="30" width="180" height="56" stroke="#6B8DAD"/>
+        <text class="t" x="110" y="54">LLM forward pass</text><text class="s" x="110" y="72">GPU · one logit per token</text>
+        <rect class="bx" x="20" y="170" width="180" height="70" stroke="#C9A84C"/>
+        <text class="t" x="110" y="192">Grammar engine</text><text class="s" x="110" y="210">parser state · remainder</text><text class="s" x="110" y="225">cached mask + runtime check</text>
+        <rect class="bx" x="260" y="100" width="170" height="56" stroke="rgba(200,200,212,0.5)"/>
+        <text class="t" x="345" y="124">logits + mask → −∞</text><text class="s" x="345" y="142">then greedy / sample / beam</text>
+        <rect class="bx" x="490" y="100" width="190" height="56" stroke="#5BA68A"/>
+        <text class="t" x="585" y="124">append token</text><text class="s" x="585" y="142">update parser incrementally</text>
+        <rect class="bx" x="490" y="220" width="190" height="56" stroke="#D4956B"/>
+        <text class="t" x="585" y="244">semantic check (IterGen)</text><text class="s" x="585" y="262">at symbol boundaries only</text>
+        <path class="ar" d="M200,58 C235,58 230,118 258,122" stroke="rgba(200,200,212,0.5)" marker-end="url(#gah)"/>
+        <path class="ar" d="M200,205 C235,205 230,140 258,136" stroke="rgba(201,168,76,0.7)" marker-end="url(#gag)"/>
+        <path class="ar" d="M430,128 L488,128" stroke="rgba(200,200,212,0.5)" marker-end="url(#gah)"/>
+        <path class="ar" d="M585,100 C585,20 300,10 202,52" stroke="rgba(200,200,212,0.35)" marker-end="url(#gah)"/>
+        <path class="ar" d="M585,156 L585,218" stroke="rgba(212,149,107,0.6)" marker-end="url(#gat)"/>
+        <path class="ar" d="M490,250 C330,250 260,240 202,220" stroke="rgba(212,149,107,0.7)" stroke-dasharray="4 3" marker-end="url(#gat)"/>
+        <text class="s" x="345" y="262" style="fill:#D4956B">backward: crop output, KV cache, parser</text>
+        <text class="s" x="400" y="22">next step</text>
+        <text class="s" x="228" y="168" style="fill:rgba(201,168,76,0.8)">mask</text>
+      </svg>
+      </div>
+    </div>
+
+    <h3 class="sub">Five things none of them guarantee</h3>
+
+    <p><strong>1. You need the logits.</strong> All of this happens inside the decoding loop. With a closed API that only returns text, you can't apply your own mask. You're limited to whatever constrained mode the provider offers.</p>
+
+    <p><strong>2. The guarantee is only as good as the grammar.</strong> Real grammars are big, and "a substantial subset of Python" is not Python. Non-context-free features like indentation need special handling.</p>
+
+    <p><strong>3. Alive isn't finished.</strong> Every prefix is valid, but if the token budget runs out, the output is cut off — exactly SynCode's leftover 4%.</p>
+
+    <p><strong>4. Masking changes the model's choices, not just its errors.</strong> Masking and renormalizing at every step isn't the same as asking "of all valid programs, which does the model prefer?" A model can be steered down a path it would have rated unlikely overall, simply because each step looked fine locally. Park et al. (NeurIPS 2024, "Grammar-Aligned Decoding") study this distortion and propose a fix. In practice it's usually a good trade, but it's a real effect.</p>
+
+    <p><strong>5. Valid isn't correct.</strong> SynCode's near-unchanged pass@1 shows it: a perfectly parsable program can still compute the wrong thing. IterGen narrows the gap only for properties someone has written a check for.</p>
+
+    <h3 class="sub">Test yourself</h3>
+
+    <!-- LAB 8: QUIZ -->
+    <div class="lab" id="lab8">
+      <div class="lab-head">
+        <div class="lab-title"><span class="dot"></span> Five questions</div>
+        <div class="lab-sub" id="l8Score">0 / 5</div>
+      </div>
+      <div id="l8Quiz"></div>
+    </div>
+
+    <!-- ================= EPILOGUE ================= -->
+    <div class="section-header">
+      <span class="section-number">∴</span>
+      <span class="section-title">What I'd tell myself at the start</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>Grammar-constrained decoding is one simple move — set the logits of tokens that would lead to a dead end to −∞ — and a decade of compiler theory deciding which tokens those are, fast enough not to matter. PICARD showed the move works, checking only the model's favourites with a hand-written SQL parser. SynCode made it general and exact by noticing that, after the remainder, a token's fate depends only on a DFA state, so almost everything can be precomputed. XGrammar carried that idea through nested, stack-based grammars by caching every token that never looks below the top of the stack. And IterGen added the one thing a left-to-right decoder can't do: go back, by grammar symbol, when a check you wrote says the meaning is wrong.</p>
+
+    <p>The corrections to my opening summary were the most useful part of studying this. The guarantee is about prefixes. The speed-up is about the mask, not the model. And semantic checking is something you program, not something you get for free.</p>
+
+    <h3 class="sub">References</h3>
+    <ul class="refs">
+      <li>Torsten Scholak, Nathan Schucher, Dzmitry Bahdanau. <a href="https://aclanthology.org/2021.emnlp-main.779/" target="_blank">PICARD: Parsing Incrementally for Constrained Auto-Regressive Decoding from Language Models</a>. EMNLP 2021.</li>
+      <li>Shubham Ugare, Tarun Suresh, Hangoo Kang, Sasa Misailovic, Gagandeep Singh. <a href="https://arxiv.org/abs/2403.01632" target="_blank">SynCode: LLM Generation with Grammar Augmentation</a>. TMLR 2025.</li>
+      <li>Yixin Dong, Charlie F. Ruan, et al. <a href="https://arxiv.org/abs/2411.15100" target="_blank">XGrammar: Flexible and Efficient Structured Generation Engine for Large Language Models</a>. arXiv 2024; MLSys 2025. See also the <a href="https://blog.mlc.ai/2024/11/22/achieving-efficient-flexible-portable-structured-generation-with-xgrammar" target="_blank">MLC blog post</a>.</li>
+      <li>Shubham Ugare, Rohan Gumaste, Tarun Suresh, Gagandeep Singh, Sasa Misailovic. <a href="https://arxiv.org/abs/2410.07295" target="_blank">IterGen: Iterative Semantic-aware Structured LLM Generation with Backtracking</a>. ICLR 2025.</li>
+      <li>Kanghee Park, Jiayu Wang, Taylor Berg-Kirkpatrick, Nadia Polikarpova, Loris D'Antoni. Grammar-Aligned Decoding. NeurIPS 2024.</li>
+    </ul>
+
+    <div class="series-nav" style="margin-top:2rem">
+      <a href="index.html">← All writing</a>
+      <a href="tree-positional-encoding.html">Related: Teaching a Transformer to see trees →</a>
+    </div>
+
+  </article>
+</div>
+
+<footer>
+  <div class="footer-inner">
+    <div class="footer-left">Let's <span>connect</span>.</div>
+    <div class="footer-links">
+      <a href="mailto:vanmaliaakash5@gmail.com">Email</a>
+      <a href="https://github.com/aakashvanmali45" target="_blank">GitHub</a>
+      <a href="https://linkedin.com/in/aakashvanmali" target="_blank">LinkedIn</a>
+    </div>
+  </div>
+  <div class="footer-note">© 2026 Aakash Vanmali · Study notes on grammar-constrained decoding, built up one stage at a time</div>
+</footer>
+
+<script>
+(function(){
+'use strict';
+const RM = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const show = t => t === '\n' ? '\\n' : t.replace(/ /g, '·');
+const $ = id => document.getElementById(id);
+function btnGroup(host, items, onPick, initial){
+  host.innerHTML = '';
+  const bs = items.map((it, i) => {
+    const b = document.createElement('button'); b.className = 'lab-btn' + (i === initial ? ' on' : ''); b.textContent = it.label;
+    b.addEventListener('click', () => { bs.forEach(x => x.classList.toggle('on', x === b)); onPick(it, i); });
+    host.appendChild(b); return b;
+  });
+  return bs;
+}
+
+/* ============ Toy calculator grammar: prefix checker ============ */
+const FUNCS = ['math_exp', 'math_sqrt', 'math_sin', 'math_cos'];
+function checkDSL(s){
+  let i = 0, state = 'E', depth = 0; const lex = [];
+  const dead = msg => ({ status: 'dead', why: msg, lex, depth, state });
+  while (i < s.length) {
+    const c = s[i];
+    if (c === ' ') { i++; continue; }
+    if (/[A-Za-z_]/.test(c)) {
+      let j = i; while (j < s.length && /[A-Za-z_]/.test(s[j])) j++;
+      const w = s.slice(i, j), atEnd = j === s.length;
+      if (state !== 'E') return dead(`"${w}" can't appear here — a value just ended, so an operator or bracket must come next.`);
+      if (FUNCS.includes(w)) { lex.push({ t: 'FUNC', x: w }); state = 'F'; i = j; continue; }
+      if (atEnd && FUNCS.some(f => f.startsWith(w))) {
+        return { status: 'live', why: `"${w}" isn't finished yet, but it could still grow into a function name. It's the remainder.`, lex, depth, state: 'E', rem: { t: 'FUNC?', x: w }, next: FUNCS.filter(f => f.startsWith(w)).map(f => f.slice(w.length) ? '…' + f.slice(w.length) : f) };
+      }
+      return dead(`"${w}" isn't a function in this grammar, and no continuation can make it one.`);
+    }
+    if (/[0-9]/.test(c)) {
+      let j = i; while (j < s.length && /[0-9]/.test(s[j])) j++;
+      let t = 'INT';
+      if (s[j] === '.') {
+        let k = j + 1; while (k < s.length && /[0-9]/.test(s[k])) k++;
+        if (k === j + 1) {
+          if (k === s.length) {
+            if (state !== 'E') return dead('Two values in a row need an operator between them.');
+            return { status: 'live', why: `"${s.slice(i, k)}" is half a FLOAT — it needs digits after the dot. It's the remainder.`, lex, depth, state: 'E', rem: { t: 'FLOAT?', x: s.slice(i, k) }, next: ['digits'] };
+          }
+          return dead('A number can\'t end with a bare "."');
+        }
+        j = k; t = 'FLOAT';
+      }
+      if (state !== 'E') return dead('Two values in a row need an operator between them.');
+      lex.push({ t, x: s.slice(i, j) }); state = 'O'; i = j; continue;
+    }
+    if (c === '(') { if (state !== 'E' && state !== 'F') return dead('"(" can\'t follow a finished value here.'); lex.push({ t: '(', x: '(' }); depth++; state = 'E'; i++; continue; }
+    if (c === ')') {
+      if (state !== 'O') return dead('")" can only close a bracket after a complete value.');
+      if (depth === 0) return dead('There\'s no open bracket for this ")" to close.');
+      lex.push({ t: ')', x: ')' }); depth--; state = 'O'; i++; continue;
+    }
+    if ('+-*/'.includes(c)) { if (state !== 'O') return dead(`"${c}" needs a value on its left.`); lex.push({ t: c, x: c }); state = 'E'; i++; continue; }
+    return dead(`"${c === '\n' ? '\\n' : c}" isn't part of this grammar at all.`);
+  }
+  let next;
+  if (state === 'E') next = ['INT', 'FLOAT', 'FUNC', '('];
+  else if (state === 'F') next = ['('];
+  else next = ['+', '-', '*', '/'].concat(depth > 0 ? [')'] : ['<end>']);
+  const complete = state === 'O' && depth === 0;
+  const why = complete ? 'A complete expression — and still alive, since operators could extend it.'
+    : state === 'F' ? 'A function name must be followed by "(".'
+    : state === 'E' ? (s.trim() ? 'Waiting for a value.' : 'Empty so far: anything that can start an expression is allowed.')
+    : `A value just ended, but ${depth} bracket${depth > 1 ? 's are' : ' is'} still open.`;
+  return { status: complete ? 'complete' : 'live', why, lex, depth, state, next };
+}
+
+/* ============ LAB 1: next-token ============ */
+(function(){
+  const cands = [['·quantity', 3.1], ['·qty', 2.5], ['·tax_rate', 2.0], ['·1.19', 1.7], ['·(', 1.1], ['·*', 0.4], ['\\n', -0.4]];
+  const masked = new Set();
+  const bars = $('l1Bars'), info = $('l1Info'), temp = $('l1Temp'), tv = $('l1T');
+  function paint(){
+    const T = +temp.value / 10; tv.textContent = T.toFixed(1);
+    const ex = cands.map(([, z]) => Math.exp(z / T));
+    const tot = ex.reduce((a, b) => a + b, 0);
+    const totM = ex.reduce((a, e, i) => a + (masked.has(i) ? 0 : e), 0);
+    let best = -1, bp = -1;
+    ex.forEach((e, i) => { if (!masked.has(i) && e > bp) { bp = e; best = i; } });
+    bars.innerHTML = cands.map(([t, z], i) => {
+      const p = ex[i] / tot, pm = masked.has(i) || !totM ? 0 : ex[i] / totM;
+      return `<div class="pbar${masked.has(i) ? ' masked' : ''}${i === best ? ' top' : ''}" data-i="${i}" tabindex="0" role="button" aria-label="${t}, ${(pm * 100).toFixed(1)} percent">` +
+        `<span class="tok">${esc(t)}</span><span class="track"><span class="fill" style="width:${(pm * 100).toFixed(1)}%"></span></span>` +
+        `<span class="pct">${masked.has(i) ? '−∞' : (pm * 100).toFixed(1) + '%'}</span></div>`;
+    }).join('');
+    bars.querySelectorAll('.pbar').forEach(b => {
+      const tog = () => { const i = +b.dataset.i; masked.has(i) ? masked.delete(i) : masked.add(i); paint(); };
+      b.addEventListener('click', tog); b.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tog(); } });
+    });
+    const massM = [...masked].reduce((a, i) => a + ex[i] / tot, 0);
+    info.innerHTML = best < 0 ? 'Everything is masked — there is nothing left to choose. A real grammar engine must always leave at least one option (or allow EOS).'
+      : `Greedy decoding would pick <strong>${esc(cands[best][0])}</strong>.` +
+        (masked.size ? ` Masked tokens held ${(massM * 100).toFixed(1)}% of the probability; it has been shared out among the rest in proportion to their original sizes.` : ' Mask the favourite and watch the next one take over.');
+  }
+  temp.addEventListener('input', paint);
+  $('l1Reset').addEventListener('click', () => { masked.clear(); paint(); });
+  paint();
+})();
+
+/* ============ LAB 2: prefix checker ============ */
+(function(){
+  const inp = $('l2In');
+  const presets = ['math_sqrt(3) * (2.27', 'math_sq', 'math_area(', '2 + 3', '(2 + 3))', '2.', 'math_cos(1.5) 4'];
+  btnGroup($('l2Presets'), presets.map(p => ({ label: p })), it => { inp.value = it.label; paint(); }, 0);
+  function paint(){
+    const r = checkDSL(inp.value);
+    $('l2Status').innerHTML = `<span class="badge ${r.status}">${r.status === 'live' ? 'alive — valid prefix' : r.status === 'complete' ? 'complete' : 'dead'}</span>`;
+    $('l2Why').textContent = r.why;
+    $('l2Lex').innerHTML = (r.lex.map(l => `<span class="chip2 term" title="${esc(l.t)}">${esc(l.x)} <small style="opacity:.6">${esc(l.t)}</small></span>`).join('') +
+      (r.rem ? `<span class="chip2 rem">${esc(r.rem.x)} <small>remainder</small></span>` : '')) || '<span class="kv-line">(nothing yet)</span>';
+    $('l2Depth').textContent = r.depth;
+    $('l2Next').innerHTML = r.status === 'dead' ? '<span class="chip2" style="color:var(--amber);border-color:var(--amber)">nothing — dead end</span>'
+      : (r.next || []).map(n => `<span class="chip2 exp">${esc(n)}</span>`).join('');
+  }
+  inp.addEventListener('input', paint);
+  paint();
+})();
+
+/* ============ LAB 3: decoding simulator ============ */
+(function(){
+  const V = ['math', '_sqrt', '_area', '_sin', 'tri', '(', ')', '3', '2.27', ' /', ' *', ' +', ' 4', ' 2.27', '\n', 'Answer', ':', '<eos>', 'angle'];
+  const S = {
+    '': { math: 4.0, tri: 2.6, '2.27': 1.2, '(': 0.4, Answer: 1.0 },
+    'math': { _area: 3.6, _sqrt: 3.1, _sin: 1.2, '(': 0.2, angle: 0.3 },
+    'math_area': { '(': 4.0, ')': 0.1 },
+    'math_area(': { '2.27': 3.8, '3': 1.4 },
+    'math_area(2.27': { ')': 4.0, ' *': 0.9 },
+    'math_area(2.27)': { '\n': 3.9, '<eos>': 2.2, ' *': 1.0 },
+    'math_area(2.27)\n': { Answer: 3.5, math: 2.0 },
+    'math_area(2.27)\nAnswer': { ':': 4.0 },
+    'math_area(2.27)\nAnswer:': { tri: 3.0, math: 2.5 },
+    'math_sqrt': { '(': 4.2 },
+    'math_sqrt(': { '3': 3.6, '2.27': 3.0 },
+    'math_sqrt(3': { ')': 4.0, ' *': 0.6 },
+    'math_sqrt(3)': { '\n': 3.4, ' /': 3.1, '<eos>': 1.5, ' *': 1.2 },
+    'math_sqrt(3) /': { ' 4': 4.0, ' 2.27': 1.5 },
+    'math_sqrt(3) / 4': { '\n': 3.5, ' *': 3.3, '<eos>': 2.0 },
+    'math_sqrt(3) / 4 *': { ' 2.27': 4.2, ' 4': 0.8 },
+    'math_sqrt(3) / 4 * 2.27': { ' *': 3.4, '\n': 3.2, '<eos>': 3.0 },
+    'math_sqrt(3) / 4 * 2.27 *': { ' 2.27': 4.3 },
+    'math_sqrt(3) / 4 * 2.27 * 2.27': { '\n': 3.7, '<eos>': 3.6, ' *': 1.0 }
+  };
+  const FALLBACK = { '<eos>': 2.0, '\n': 1.6, Answer: 1.0 };
+  const MAX = 14;
+  let on = true, toks = [], done = false, checks = 0, last = null;
+  const text = () => toks.join('');
+  function logits(t){ const sc = S[t] || FALLBACK; return V.map(v => sc[v] != null ? sc[v] : -1.5 - (v.length % 3) * 0.3); }
+  function valid(t, v){
+    if (v === '<eos>') return checkDSL(t).status === 'complete';
+    return checkDSL(t + v).status !== 'dead';
+  }
+  function compute(){
+    const t = text(), z = logits(t);
+    const ex = z.map(x => Math.exp(x)), tot = ex.reduce((a, b) => a + b, 0);
+    const rows = V.map((v, i) => ({ v, z: z[i], p: ex[i] / tot, ok: on ? valid(t, v) : true }));
+    const totM = rows.reduce((a, r) => a + (r.ok ? r.p : 0), 0);
+    rows.forEach(r => r.pm = r.ok && totM ? r.p / totM : 0);
+    rows.sort((a, b) => b.z - a.z);
+    const pick = rows.find(r => r.ok);
+    return { rows, pick };
+  }
+  function step(){
+    if (done) return;
+    const { pick } = compute();
+    if (on) checks += V.length;
+    last = pick.v;
+    if (pick.v === '<eos>' || toks.length >= MAX) { done = true; if (pick.v !== '<eos>') last = '(limit)'; paint(); return; }
+    toks.push(pick.v);
+    paint();
+  }
+  function paint(){
+    const t = text();
+    $('l3Out').innerHTML = toks.map(x => `<span class="t${x === '\n' ? ' nl' : ''}">${esc(x === '\n' ? '⏎\n' : x)}</span>`).join('') + (done ? '' : '<span class="caret"></span>');
+    const st = checkDSL(t);
+    const badge = done ? (st.status === 'complete' && last === '<eos>' ? '<span class="badge complete">finished · valid</span>' : st.status === 'dead' ? '<span class="badge dead">finished · invalid program</span>' : '<span class="badge live">stopped · cut off</span>')
+      : `<span class="badge ${st.status}">${st.status === 'dead' ? 'already dead' : st.status === 'complete' ? 'complete so far' : 'alive'}</span>`;
+    $('l3Status').innerHTML = `${badge} &nbsp; ${toks.length} tokens · ${on ? `${checks} validity checks so far (every token, re-parsing everything)` : 'no checks'}`;
+    const tab = $('l3Cands');
+    if (done) { tab.innerHTML = ''; }
+    else {
+      const { rows, pick } = compute();
+      tab.innerHTML = `<tr><th>token</th><th>logit</th><th>p</th><th>grammar</th><th>p after mask</th></tr>` +
+        rows.slice(0, 8).map(r => `<tr class="${r === pick ? 'pick' : !r.ok ? 'mask' : ''}"><td>${esc(show(r.v))}</td><td>${r.z.toFixed(1)}</td><td>${(r.p * 100).toFixed(1)}%</td><td class="v">${on ? (r.ok ? '✓ alive' : '✗ masked') : '—'}</td><td>${r.ok ? (r.pm * 100).toFixed(1) + '%' : '0'}</td></tr>`).join('') +
+        `<tr><td colspan="5" style="color:rgba(200,200,212,0.4)">… ${V.length - 8} more tokens</td></tr>`;
+    }
+    const info = $('l3Info');
+    if (!toks.length && !done) info.innerHTML = on ? 'The constraint is <strong>on</strong>. Press <em>Next token</em> to see each decision: the table shows the model\'s top candidates and which ones the grammar masks.' : 'The constraint is <strong>off</strong>: the model picks its favourite every time. Press <em>Next token</em>.';
+    else if (done) info.innerHTML = on ? 'EOS became available only once the expression was complete, so the output is guaranteed to parse.' : 'Without the constraint, the model wrote a function that doesn\'t exist, then drifted into a new "Answer:" line. Every step looked locally likely; the program is invalid.';
+    else {
+      const { rows, pick } = compute();
+      const top = rows[0];
+      info.innerHTML = top !== pick ? `The model's favourite <strong>${esc(show(top.v))}</strong> would lead to a dead end, so it is masked and <strong>${esc(show(pick.v))}</strong> wins instead.` : `The favourite <strong>${esc(show(pick.v))}</strong> keeps the output alive, so the constraint changes nothing this step.`;
+    }
+  }
+  function reset(){ toks = []; done = false; checks = 0; last = null; paint(); }
+  $('l3On').addEventListener('click', () => { on = true; $('l3On').classList.add('on'); $('l3Off').classList.remove('on'); reset(); });
+  $('l3Off').addEventListener('click', () => { on = false; $('l3Off').classList.add('on'); $('l3On').classList.remove('on'); reset(); });
+  $('l3Step').addEventListener('click', step);
+  $('l3Run').addEventListener('click', () => { let n = 0; while (!done && n++ < 20) step(); });
+  $('l3Reset').addEventListener('click', reset);
+  reset();
+})();
+
+/* ============ LAB 4: PICARD modes ============ */
+(function(){
+  const modes = ['Off', 'Lexing', 'Parsing w/o guards', 'Parsing with guards'];
+  const rows = [
+    { q: 'select email_address, cell_phone, home_phone from professionals', fail: 1, why: 'Lexing: cell_phone isn\'t a column anywhere in the schema (the real one is cell_number). Example from the paper.' },
+    { q: 'selct email_address from professionals', fail: 1, why: 'Lexing: "selct" isn\'t a SQL keyword.' },
+    { q: 'select from professionals email_address', fail: 2, why: 'Parsing: every word is real, but the clause order is wrong. Lexing ignores order, so only parsing catches it.' },
+    { q: 'select maker, model from car_makers', fail: 3, why: 'Guards: grammatical and every name exists, but car_makers has no "model" column, so model can never be brought into scope. Example from the paper — the right table is model_list.' },
+    { q: 'select maker, model from model_list', fail: 99, why: 'Passes every level.' }
+  ];
+  let mode = 3;
+  btnGroup($('l4Modes'), modes.map(m => ({ label: m })), (_, i) => { mode = i; paint(); }, 3);
+  function paint(){
+    $('l4Table').innerHTML = '<tr><th>hypothesis</th><th>result</th></tr>' + rows.map(r => {
+      const rej = mode > 0 && r.fail <= mode;
+      return `<tr><td class="q">${esc(r.q)}</td><td class="st ${rej ? 'no' : 'ok'}">${rej ? '✗ rejected' : '✓ kept'}</td></tr>`;
+    }).join('');
+    const kept = rows.filter(r => !(mode > 0 && r.fail <= mode)).length;
+    $('l4Info').innerHTML = `<strong>${modes[mode]}:</strong> ${kept} of ${rows.length} hypotheses survive.<br>` +
+      rows.filter(r => mode > 0 && r.fail === mode).map(r => r.why).join('<br>') +
+      (mode === 0 ? 'With checking off, all five stay in the beam — including four that would fail when executed.' : '') +
+      (mode === 3 ? '<br>Each level catches everything the lower levels catch, plus more.' : '');
+  }
+  paint();
+})();
+
+/* ============ LAB 5: SynCode DFA mask store ============ */
+(function(){
+  const D = c => /[0-9]/.test(c);
+  const T = {
+    INT:   { n: 'INT',   states: ['i0', 'i1'], start: 'i0', acc: new Set(['i1']), step: (q, c) => D(c) ? 'i1' : null },
+    FLOAT: { n: 'FLOAT', states: ['f0', 'f1', 'f2', 'f3'], start: 'f0', acc: new Set(['f3']),
+             step: (q, c) => q === 'f0' ? (D(c) ? 'f1' : null) : q === 'f1' ? (D(c) ? 'f1' : c === '.' ? 'f2' : null) : (D(c) ? 'f3' : null) },
+    RPAR:  { n: ')', states: ['r0', 'r1'], start: 'r0', acc: new Set(['r1']), step: (q, c) => q === 'r0' && c === ')' ? 'r1' : null },
+    MUL:   { n: '*', states: ['m0', 'm1'], start: 'm0', acc: new Set(['m1']), step: (q, c) => q === 'm0' && c === '*' ? 'm1' : null },
+    ADD:   { n: '+', states: ['a0', 'a1'], start: 'a0', acc: new Set(['a1']), step: (q, c) => q === 'a0' && c === '+' ? 'a1' : null }
+  };
+  const walkStr = (d, q, s) => { for (const c of s) { if (q === null) return null; q = d.step(q, c); } return q; };
+  // dmatch per SynCode Definition 10, with a recorded path for explanation
+  function dmatch(w, seq, q, path){
+    const d = seq[0]; let s = q;
+    for (let k = 0; k <= w.length; k++) {
+      if (k === w.length) { path.push(`end in ${d.n}:${s} — ${s ? 'live ✓' : 'dead'}`); return s !== null; }
+      if (d.acc.has(s)) {
+        if (seq.length === 1) { path.push(`${d.n} complete at ${s}; rest "${w.slice(k)}" allowed (prefix match) ✓`); return true; }
+        const sub = [`${d.n} complete → continue in ${seq[1].n}`];
+        if (dmatch(w.slice(k), seq.slice(1), seq[1].start, sub)) { path.push(...sub); return true; }
+      }
+      const ns = d.step(s, w[k]);
+      path.push(`'${w[k]}': ${d.n}:${s} → ${ns || 'dead ✗'}`);
+      if (ns === null) return false;
+      s = ns;
+    }
+  }
+  const vocab = ['7', '27', '.', '.27', ')', '))', ')*', '*', '*(', '.5)', 'a', '+', '2.2'];
+  const scen = [
+    { label: 'Remainder "2"', ctx: 'math_sqrt(3) * (2', fixed: 'math_sqrt(3) * (', rem: '2',
+      seqs: [['INT', 'RPAR'], ['INT', 'MUL'], ['INT', 'ADD'], ['FLOAT']], note: 'The last lexeme "2" is an INT for now, but it might grow (into 27) or turn into a FLOAT (2.5). So the parser offers INT followed by what may follow an INT here, plus FLOAT on its own.' },
+    { label: 'Remainder "2."', ctx: 'math_sqrt(3) * (2.', fixed: 'math_sqrt(3) * (', rem: '2.',
+      seqs: [['FLOAT']], note: '"2." isn\'t any terminal yet — only FLOAT can still match it. The remainder is unlexed.' }
+  ];
+  let sc = 0, active = new Set([0, 1, 2, 3]), sel = '.27';
+  btnGroup($('l5Scen'), scen, (_, i) => { sc = i; active = new Set(scen[i].seqs.map((_, k) => k)); paint(); }, 0);
+  function maskFor(seqNames, rem){
+    const seq = seqNames.map(n => T[n]);
+    const q = walkStr(seq[0], seq[0].start, rem);
+    return { q, bits: vocab.map(t => q !== null && dmatch(t, seq, q, [])) };
+  }
+  function paint(){
+    const S = scen[sc];
+    $('l5Ctx').innerHTML = `Output so far: <b>${esc(S.ctx)}</b> &nbsp;→ settled: <b>${esc(S.fixed)}</b> &nbsp;remainder: <b style="color:var(--gold)">${esc(S.rem)}</b><br>${S.note}`;
+    const sh = $('l5Seqs'); sh.innerHTML = '';
+    S.seqs.forEach((sq, k) => {
+      const b = document.createElement('button'); b.className = 'lab-btn' + (active.has(k) ? ' on' : '');
+      b.textContent = '[' + sq.map(n => T[n].n).join(', ') + ']';
+      b.addEventListener('click', () => { active.has(k) ? active.delete(k) : active.add(k); paint(); });
+      sh.appendChild(b);
+    });
+    const masks = S.seqs.map(sq => maskFor(sq, S.rem));
+    const union = vocab.map((_, i) => masks.some((m, k) => active.has(k) && m.bits[i]));
+    // DFA chain for first active sequence
+    const k0 = [...active].sort()[0];
+    if (k0 != null) {
+      const sq = S.seqs[k0], q = masks[k0].q;
+      $('l5Dfa').innerHTML = sq.map((n, j) => {
+        const d = T[n];
+        return `<div class="dfa-box"><div class="n">${j === 0 ? `DFA ${d.n} after reading "${esc(S.rem)}"` : `then DFA ${d.n}`}</div><div class="dfa-states">${d.states.map(s => `<span class="st-dot${d.acc.has(s) ? ' acc' : ''}${j === 0 && s === q ? ' cur' : ''}">${s}</span>`).join('')}</div></div>` + (j < sq.length - 1 ? '<span style="color:rgba(200,200,212,0.4)">→</span>' : '');
+      }).join('');
+    } else $('l5Dfa').innerHTML = '<span class="kv-line">Select at least one accept sequence.</span>';
+    $('l5Toks').innerHTML = vocab.map((t, i) => `<button class="tg ${union[i] ? 'y' : 'n'}${t === sel ? ' sel' : ''}" data-t="${esc(t)}">${esc(t)}</button>`).join('');
+    $('l5Toks').querySelectorAll('.tg').forEach(b => b.addEventListener('click', () => { sel = b.dataset.t; paint(); }));
+    // mask store rows
+    $('l5Store').innerHTML = `<tr><th>DFA state</th><th>then</th><th>precomputed mask over: ${vocab.map(esc).join(' ')}</th></tr>` +
+      S.seqs.map((sq, k) => {
+        const m = masks[k];
+        return `<tr style="${active.has(k) ? '' : 'opacity:.35'}"><td>${T[sq[0]].n}:${m.q || 'dead'}</td><td>${sq.length > 1 ? T[sq[1]].n : '—'}</td><td><span class="bits">${m.bits.map(b => `<span class="bit${b ? ' on' : ''}"></span>`).join('')}</span></td></tr>`;
+      }).join('');
+    // explanation of selected token
+    const lines = []; let approx = false;
+    S.seqs.forEach((sq, k) => {
+      if (!active.has(k)) return;
+      const seq = sq.map(n => T[n]); const q = walkStr(seq[0], seq[0].start, S.rem);
+      const path = []; const ok = q !== null && dmatch(sel, seq, q, path);
+      if (ok && path.some(p => p.includes('prefix match'))) approx = true;
+      lines.push(`<strong>[${sq.map(n => T[n].n).join(', ')}]</strong> ${ok ? '<span class="ok">allows</span>' : '<span class="no">rejects</span>'} <code>${esc(sel)}</code>: start at ${seq[0].n}:${q || 'dead'} · ${path.map(esc).join(' · ')}`);
+    });
+    const i = vocab.indexOf(sel);
+    $('l5Info').innerHTML = `Token <code>${esc(sel)}</code> is <strong>${union[i] ? 'allowed' : 'masked'}</strong> (union over the selected accept sequences).<br>` + lines.join('<br>') +
+      (approx ? '<br><span style="color:var(--gold)">Note the deliberate over-approximation: once the accept sequence is matched, the rest of the token is allowed without checking. That keeps SynCode sound (it never masks a good token), at the cost of occasionally allowing one that later turns out bad — with short accept sequences.</span>' : '') +
+      '<br><span style="opacity:.75">Each row of the table above was computed offline, before any prompt existed. At generation time SynCode only walks the remainder, looks up the rows, and ORs them.</span>';
+  }
+  paint();
+})();
+
+/* ============ LAB 6: XGrammar PDA ============ */
+(function(){
+  const clone = st => st.map(f => ({ ...f }));
+  function completeChild(st){ const p = st[st.length - 1]; if (p && p.r === 'ARR') p.s = 'after'; }
+  // returns {stack, minLen} or null
+  function step(st, c, track){
+    const top = st[st.length - 1];
+    if (!top) return null;
+    const pop = () => { st.pop(); track.min = Math.min(track.min, st.length); completeChild(st); };
+    if (top.r === 'ROOT') {
+      if (top.s === 0 && c === '[') { top.s = 1; st.push({ r: 'ARR', s: 'open' }); return st; }
+      return null;
+    }
+    if (top.r === 'STR') {
+      if (/[a-z]/.test(c)) return st;
+      if (c === '"') { pop(); return st; }
+      return null;
+    }
+    if (top.r === 'ARR') {
+      if (top.s === 'open' || top.s === 'comma') {
+        if (c === '[') { st.push({ r: 'ARR', s: 'open' }); return st; }
+        if (c === '"') { st.push({ r: 'STR' }); return st; }
+        if (c === ']' && top.s === 'open') { pop(); return st; }
+        return null;
+      }
+      if (top.s === 'after') {
+        if (c === ',') { top.s = 'comma'; return st; }
+        if (c === ']') { pop(); return st; }
+        return null;
+      }
+    }
+    return null;
+  }
+  function run(str, st0){
+    let st = st0 ? clone(st0) : [{ r: 'ROOT', s: 0 }];
+    const L = st.length, track = { min: L };
+    for (const c of str) { st = step(st, c, track); if (!st) return { ok: false, dep: track.min < L }; }
+    return { ok: true, st, dep: track.min < L };
+  }
+  const label = (f, top) => f.r === 'ROOT' ? (f.s === 0 ? 'root · expecting "["' : top ? 'root · top-level array finished' : 'root · inside the top-level array') : f.r === 'STR' ? 'string · inside quotes' : `array · ${f.s === 'open' ? (top ? 'expecting a value or "]"' : 'reading its first value') : f.s === 'comma' ? (top ? 'expecting a value after ","' : 'reading a value after ","') : 'expecting "," or "]"'}`;
+  const vocab = ['"', 'ab', 'cd"', '"]', ']', ']]', ']]]', ',', ',"', ',[', '["', '[[', 'x"]', '"],["'];
+  const presets = ['[["ab"],["c', '[["ab"],', '["ab', '[[["x"]', '[[]', '[]'];
+  const inp = $('l6In');
+  let sel = null;
+  btnGroup($('l6Presets'), presets.map(p => ({ label: p })), it => { inp.value = it.label; sel = null; paint(); }, 0);
+  function paint(){
+    const r = run(inp.value);
+    const stackEl = $('l6Stack');
+    if (!r.ok) {
+      stackEl.innerHTML = '<div class="frame" style="border-color:var(--amber);color:var(--amber)">dead — this prefix can\'t be part of any valid output</div>';
+      $('l6Status').innerHTML = '<span class="badge dead">dead</span>';
+      $('l6Toks').innerHTML = ''; $('l6Ratio').innerHTML = ''; $('l6Sum').textContent = ''; return;
+    }
+    const st = r.st;
+    stackEl.innerHTML = st.map((f, i) => `<div class="frame${i === st.length - 1 ? ' top' : ''}"><span>${label(f, i === st.length - 1)}</span><small>depth ${i}</small></div>`).join('');
+    const complete = st.length === 1 && st[0].s === 1;
+    $('l6Status').innerHTML = `<span class="badge ${complete ? 'complete' : 'live'}">${complete ? 'complete' : 'alive'}</span> &nbsp;stack depth ${st.length - 1}`;
+    let ind = 0, dep = 0;
+    const res = vocab.map(t => { const x = run(t, st); x.dep ? dep++ : ind++; return x; });
+    $('l6Toks').innerHTML = vocab.map((t, i) => {
+      const x = res[i];
+      return `<button class="tg ${x.ok ? 'y' : 'n'}${t === sel ? ' sel' : ''}" data-i="${i}">${esc(t)}<span class="b" style="${x.dep ? 'color:var(--gold)' : 'color:rgba(200,200,212,0.6)'}">${x.dep ? 'stack' : 'cache'}</span></button>`;
+    }).join('');
+    $('l6Toks').querySelectorAll('.tg').forEach(b => b.addEventListener('click', () => { sel = vocab[+b.dataset.i]; paint(); }));
+    $('l6Ratio').innerHTML = `<div style="width:${ind / vocab.length * 100}%;background:var(--teal)"></div><div style="width:${dep / vocab.length * 100}%;background:var(--gold)"></div>`;
+    $('l6Sum').innerHTML = `<b>${ind}</b> of ${vocab.length} tokens decided from the top rule alone (cacheable) · <b>${dep}</b> need the stack. With a real 128k vocabulary, the cacheable share is usually far above 99%.`;
+    if (sel) {
+      const x = res[vocab.indexOf(sel)];
+      $('l6Info').innerHTML = `<code>${esc(sel)}</code> is <strong>${x.ok ? 'valid' : 'invalid'}</strong> here and is <strong>${x.dep ? 'context-dependent' : 'context-independent'}</strong>. ` +
+        (x.dep ? 'Checking it closes the current rule and continues in the rule below, so the answer depends on what\'s underneath. XGrammar checks these at runtime against the real stack.'
+               : 'Its fate is decided before it ever leaves the current rule, so the answer was precomputed for this position and is read straight from the adaptive token mask cache.');
+    }
+  }
+  inp.addEventListener('input', () => { sel = null; paint(); });
+  paint();
+})();
+
+/* ============ LAB 7: IterGen ============ */
+(function(){
+  const code = [
+    'session = itergen.start(prompt)',
+    'for _ in range(max_iter):',
+    '    itergen.forward(stop_symbol=["table_name", "column_name"])',
+    '    sym, name = newest_name(itergen.view)    <span class="cm"># via view(symbol)</span>',
+    '    if name not in schema_names(sym):',
+    '        itergen.backward(sym)                 <span class="cm"># erase just it</span>',
+    '        continue',
+    '    if itergen.finished(): break'
+  ];
+  const P = 'prompt';
+  const frames = [
+    { line: 0, out: [], kv: [], cut: [], trace: '(prompt)', info: 'A session starts: the KV cache holds the prompt (schema + question), the decoding trace is empty, and the parser is in its initial state. <span style="opacity:.7">The program is a sketch in the spirit of the paper\'s Figure 3, not its exact code.</span>' },
+    { line: 2, out: [['SELECT COUNT(*) FROM ', ''], ['employee_hire_evaluation', 'tab']], kv: ['SELECT', ' COUNT', '(*)', ' FROM', ' employee', '_hire', '_evaluation'], cut: [],
+      trace: '(prompt)\n└─ SELECT COUNT(*) FROM\n   └─ employee_hire_evaluation', info: '<strong>forward</strong> generates, grammar-constrained, until a complete <code>table_name</code> exists. To know the name has ended, IterGen generated one extra lookahead token, saw the parser reduce <code>table_name</code>, recorded its span in the symbol position map, then removed the extra token.' },
+    { line: 4, out: [['SELECT COUNT(*) FROM ', ''], ['employee_hire_evaluation', 'bad']], kv: ['SELECT', ' COUNT', '(*)', ' FROM', ' employee', '_hire', '_evaluation'], cut: [],
+      trace: '(prompt)\n└─ SELECT COUNT(*) FROM\n   └─ employee_hire_evaluation', info: '<strong>view</strong> returns the newest table name. Your check fails: <code>employee_hire_evaluation</code> is the database\'s name, not a table in it. The SQL is perfectly grammatical — SynCode alone would keep it and the query would fail with "no such table".' },
+    { line: 5, out: [['SELECT COUNT(*) FROM ', '']], kv: ['SELECT', ' COUNT', '(*)', ' FROM'], cut: [' employee', '_hire', '_evaluation'],
+      trace: '(prompt)\n└─ SELECT COUNT(*) FROM\n   ├─ employee_hire_evaluation   ✗ penalised\n   └─ …', info: '<strong>backward("table_name")</strong> looks up where the last table name starts in the symbol position map, trims the output there, crops the KV cache to that token position (nothing before it is recomputed), and rewinds the parser. The rejected branch stays in the trace, and its first token now gets its score multiplied by (1 − γ)<sup>α</sup>, with γ = 0.7 and α = 1.' },
+    { line: 2, out: [['SELECT COUNT(*) FROM ', ''], ['hiring', 'tab']], kv: ['SELECT', ' COUNT', '(*)', ' FROM', ' hiring'], cut: [],
+      trace: '(prompt)\n└─ SELECT COUNT(*) FROM\n   ├─ employee_hire_evaluation   ✗\n   └─ hiring', info: 'With <code> employee</code> penalised, greedy decoding takes a different branch. <strong>forward</strong> stops after the new <code>table_name</code>.' },
+    { line: 4, out: [['SELECT COUNT(*) FROM ', ''], ['hiring', 'tab']], kv: ['SELECT', ' COUNT', '(*)', ' FROM', ' hiring'], cut: [],
+      trace: '(prompt)\n└─ SELECT COUNT(*) FROM\n   ├─ employee_hire_evaluation   ✗\n   └─ hiring   ✓', info: '<code>hiring</code> is in the schema. The check passes and generation continues from here — no restart, nothing regenerated.' },
+    { line: 2, out: [['SELECT COUNT(*) FROM ', ''], ['hiring', 'tab'], [' WHERE ', ''], ['start_from', 'col']], kv: ['SELECT', ' COUNT', '(*)', ' FROM', ' hiring', ' WHERE', ' start', '_from'], cut: [],
+      trace: '(prompt)\n└─ SELECT COUNT(*) FROM\n   ├─ employee_hire_evaluation   ✗\n   └─ hiring   ✓\n      └─ WHERE start_from   ✓', info: 'The next <strong>forward</strong> stops at a <code>column_name</code>. <code>start_from</code> is a column of <code>hiring</code>, so it passes.' },
+    { line: 2, out: [['SELECT COUNT(*) FROM ', ''], ['hiring', 'tab'], [' WHERE ', ''], ['start_from', 'col'], [" = '2020-01-01' AND ", ''], ['is_full_time', 'col']], kv: ['SELECT', ' COUNT', '(*)', ' FROM', ' hiring', ' WHERE', ' start', '_from', " = '", '2020', '-01-01', "' AND", ' is', '_full', '_time'], cut: [],
+      trace: '(prompt)\n└─ SELECT COUNT(*) FROM\n   ├─ employee_hire_evaluation   ✗\n   └─ hiring   ✓\n      └─ WHERE start_from … is_full_time   ✓', info: 'Another column, another check, passed.' },
+    { line: 7, out: [['SELECT COUNT(*) FROM ', ''], ['hiring', 'tab'], [' WHERE ', ''], ['start_from', 'col'], [" = '2020-01-01' AND ", ''], ['is_full_time', 'col'], [" = 'T'", '']], kv: ['SELECT', ' COUNT', '(*)', ' FROM', ' hiring', ' WHERE', ' start', '_from', " = '", '2020', '-01-01', "' AND", ' is', '_full', '_time', " = '", "T'", '<eos>'], cut: [],
+      trace: '(prompt)\n└─ SELECT COUNT(*) FROM\n   ├─ employee_hire_evaluation   ✗\n   └─ hiring   ✓\n      └─ WHERE … = \'T\'   ✓ EOS', info: 'Generation reaches EOS. The query is grammatical (guaranteed by the SynCode layer) <em>and</em> every table and column name exists (guaranteed by your checks). One backtrack cost three tokens, instead of regenerating the whole query.' }
+  ];
+  let f = 0;
+  function paint(){
+    const F = frames[f];
+    $('l7Code').innerHTML = code.map((l, i) => `<div class="${i === F.line ? 'on' : ''}">${l}</div>`).join('');
+    $('l7Out').innerHTML = (F.out.map(([t, k]) => k ? `<span class="sym ${k}" title="${k === 'col' ? 'column_name' : 'table_name'}">${esc(t)}</span>` : esc(t)).join('')) || '<span style="opacity:.4">(empty)</span>';
+    $('l7Kv').innerHTML = `<span class="kvc p">${P}</span>` + F.kv.map(t => `<span class="kvc">${esc(show(t))}</span>`).join('') + F.cut.map(t => `<span class="kvc cut">${esc(show(t))}</span>`).join('');
+    $('l7Trace').textContent = F.trace;
+    $('l7Info').innerHTML = F.info;
+    $('l7Count').textContent = `step ${f + 1} / ${frames.length}`;
+  }
+  $('l7Next').addEventListener('click', () => { f = Math.min(frames.length - 1, f + 1); paint(); });
+  $('l7Back').addEventListener('click', () => { f = Math.max(0, f - 1); paint(); });
+  $('l7Reset').addEventListener('click', () => { f = 0; paint(); });
+  paint();
+})();
+
+/* ============ LAB 8: quiz ============ */
+(function(){
+  const Q = [
+    { q: 'A grammar-constrained decoder with a correct grammar finishes generating. Can the output still fail to parse?',
+      o: ['No, never', 'Yes, if it hits the maximum token limit before completing', 'Only if the model is too small'], a: 1,
+      e: 'Every prefix is kept alive, but alive isn\'t finished. SynCode\'s remaining Python and Go errors were all programs cut off at the token limit.' },
+    { q: 'Why can\'t you simply ask the parser "which terminal comes next?" and allow only tokens of that terminal?',
+      o: ['Parsers can\'t predict terminals', 'Model tokens don\'t line up with grammar terminals — one token can finish one terminal and start another', 'It would be too slow'], a: 1,
+      e: 'That\'s token misalignment. A token like ") *" crosses a boundary, and a remainder like "ret" can still change type.' },
+    { q: 'What did SynCode precompute offline?',
+      o: ['Every possible program', 'For each DFA state and next terminal, a mask over the whole vocabulary', 'The model\'s logits for common prompts'], a: 1,
+      e: 'After the remainder is walked, a token\'s fate depends only on the DFA state and the terminals that follow — not on the program — so it can be tabulated once per grammar and tokenizer.' },
+    { q: 'In XGrammar, a token inside a string, such as "]" right after a letter, closes the string and then a bracket. Is it context-independent?',
+      o: ['Yes — it\'s decided by the string rule alone', 'No — after closing the string, its validity depends on the rule underneath on the stack'], a: 1,
+      e: 'Context-dependent tokens leave the current rule, so they need the stack. Those are the few XGrammar checks at runtime; the rest come from the cache.' },
+    { q: 'IterGen backtracks after a wrong table name. What stops greedy decoding from producing the same name again?',
+      o: ['It restarts from the prompt with a new random seed', 'A recurrence penalty lowers the score of tokens that were previously backtracked', 'It masks the whole table_name rule'], a: 1,
+      e: 'Scores of previously chosen tokens are multiplied by (1 − γ)^α, pushing the model down a different branch of its decoding trace.' }
+  ];
+  const host = $('l8Quiz'); let right = 0; const answered = new Set();
+  host.innerHTML = Q.map((x, i) => `<div class="quiz-q"><div class="qt">${i + 1}. ${esc(x.q)}</div><div class="opts">${x.o.map((o, j) => `<button class="opt" data-q="${i}" data-j="${j}">${esc(o)}</button>`).join('')}</div><div class="fb" id="fb${i}"></div></div>`).join('');
+  host.querySelectorAll('.opt').forEach(b => b.addEventListener('click', () => {
+    const i = +b.dataset.q, j = +b.dataset.j; if (answered.has(i)) return;
+    answered.add(i);
+    const ok = j === Q[i].a; if (ok) right++;
+    host.querySelectorAll(`.opt[data-q="${i}"]`).forEach(o => { const k = +o.dataset.j; if (k === Q[i].a) o.classList.add('right'); else if (k === j) o.classList.add('wrong'); });
+    $('fb' + i).innerHTML = `<strong>${ok ? 'Right.' : 'Not quite.'}</strong> ${esc(Q[i].e)}`;
+    $('l8Score').textContent = `${right} / ${Q.length}` + (answered.size === Q.length ? (right === Q.length ? ' — all correct' : ' — done') : '');
+  }));
+})();
+})();
+</script>
+</body>
+</html>

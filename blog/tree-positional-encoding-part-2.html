@@ -1,0 +1,1298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Retrofitting Trees into Pretrained Transformers — Study Notes, Part 2 · Aakash Vanmali</title>
+<meta name="description" content="Part 2 of study notes on tree positional encoding: TreeGen (2020), Bartkowiak &amp; Graliński (2025) and retrofitting tree positions into pretrained code models, plus a practical implementation mental model. Interactive.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root{
+    --ink:#0B1222; --ink-light:#111B2E; --ink-surface:#162038;
+    --gold:#C9A84C; --gold-dim:rgba(201,168,76,0.15); --gold-glow:rgba(201,168,76,0.08);
+    --paper:#F6F2E8; --paper-white:#FDFBF5;
+    --text-dark:#1A1A1A; --text-mid:#4A4A4A; --text-light:#777;
+    --text-on-ink:#C8C8D4; --text-bright:#E8E8F0;
+    --border-paper:#E0D8C8; --border-ink:rgba(255,255,255,0.08);
+    --serif:'Cormorant Garamond', Georgia, serif;
+    --sans:'Space Grotesk', -apple-system, sans-serif;
+    --mono:'JetBrains Mono', monospace;
+    --max-w:780px;
+    --ease: cubic-bezier(0.25,0.46,0.45,0.94);
+    --teal:#5BA68A;
+    --steel:#6B8DAD;
+    --amber:#D4956B;
+    --lavender:#8B7DB8;
+  }
+  html{ font-size:17px; scroll-behavior:smooth; }
+  body{ font-family:var(--sans); color:var(--text-dark); background:var(--paper); line-height:1.7; -webkit-font-smoothing:antialiased; }
+  ::selection{ background:var(--gold); color:var(--ink); }
+  a{ color:var(--gold); text-decoration:none; transition:color .2s; }
+  a:hover{ text-decoration:underline; }
+
+  /* ===== TOPBAR ===== */
+  .topbar{ background:var(--ink); padding:1.1rem 0; }
+  .topbar-inner{ max-width:var(--max-w); margin:0 auto; padding:0 2rem; display:flex; justify-content:space-between; align-items:center; }
+  .topbar-name{ font-family:var(--serif); font-weight:600; font-size:1.15rem; color:var(--text-on-ink); }
+  .topbar-name span{ color:var(--gold); }
+  .topbar-links{ display:flex; gap:1.4rem; }
+  .topbar-links a{ font-family:var(--mono); font-size:0.72rem; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-on-ink); opacity:0.75; }
+  .topbar-links a:hover{ color:var(--gold); opacity:1; text-decoration:none; }
+
+  /* ===== HERO ===== */
+  .hero{ background:var(--ink); padding: 4.5rem 0 4rem; position:relative; overflow:hidden; }
+  .hero::after{
+    content:''; position:absolute; top:-20%; right:-10%; width:480px; height:480px; border-radius:50%;
+    background:radial-gradient(circle, rgba(201,168,76,0.10), transparent 70%);
+  }
+  .hero-inner{ max-width:var(--max-w); margin:0 auto; padding:0 2rem; position:relative; z-index:1; }
+  .hero-eyebrow{ font-family:var(--mono); font-size:0.7rem; letter-spacing:0.2em; text-transform:uppercase; color:var(--gold); margin-bottom:1.2rem; }
+  .hero h1{ font-family:var(--serif); font-weight:600; font-size:3rem; color:var(--text-bright); line-height:1.1; letter-spacing:-0.01em; margin-bottom:1rem; max-width:640px; }
+  .hero-dek{ font-family:var(--serif); font-style:italic; font-size:1.25rem; color:rgba(201,168,76,0.85); max-width:560px; line-height:1.5; }
+  .hero-meta{ font-family:var(--mono); font-size:0.68rem; letter-spacing:0.08em; text-transform:uppercase; color:rgba(200,200,212,0.4); margin-top:2rem; }
+  .hero-tree{ position:absolute; right:2rem; bottom:1.4rem; width:210px; opacity:0.75; z-index:0; }
+  .hero-tree line{ stroke:rgba(201,168,76,0.35); stroke-width:1; }
+  .hero-tree circle{ fill:var(--ink); stroke:rgba(201,168,76,0.6); stroke-width:1; }
+  .hero-tree circle.v{ stroke-dasharray:3 2; stroke:rgba(200,200,212,0.35); }
+  .hero-tree text{ font-family:var(--mono); font-size:7px; fill:rgba(201,168,76,0.75); text-anchor:middle; }
+
+  /* ===== CONTENT ===== */
+  .content{ max-width:var(--max-w); margin:0 auto; padding:0 2rem; }
+  article{ padding:3.5rem 0 1rem; }
+  .section-header{ display:flex; align-items:center; gap:1rem; margin: 3.4rem 0 1.6rem; }
+  .section-header:first-of-type{ margin-top:0; }
+  .section-number{ font-family:var(--serif); font-size:2rem; font-weight:300; color:var(--gold); line-height:1; opacity:0.6; }
+  .section-title{ font-family:var(--serif); font-size:1.5rem; font-weight:600; color:var(--text-dark); letter-spacing:-0.01em; }
+  .section-rule{ flex:1; height:1px; background:var(--border-paper); }
+  h3.sub{ font-family:var(--serif); font-size:1.25rem; font-weight:600; color:var(--text-dark); margin:2.3rem 0 0.7rem; letter-spacing:-0.005em; }
+
+  p{ margin:0 0 1.15rem; font-size:0.98rem; color:var(--text-mid); }
+  p.lead{ font-family:var(--serif); font-size:1.35rem; font-style:italic; color:var(--text-dark); line-height:1.6; }
+  strong{ color:var(--text-dark); font-weight:600; }
+  em{ color:var(--text-dark); }
+  code{ font-family:var(--mono); background:var(--paper-white); border:1px solid var(--border-paper); padding:1px 6px; font-size:0.85em; color:var(--gold); border-radius:2px; }
+  sub, sup{ font-size:0.7em; line-height:0; }
+
+  .formula-block{
+    font-family:var(--mono); background:var(--paper-white); border:1px solid var(--border-paper); border-left:3px solid var(--gold);
+    padding:1rem 1.3rem; margin:1.3rem 0; font-size:0.92rem; color:var(--text-dark); overflow-x:auto; line-height:1.9;
+  }
+  .formula-block .name{ font-family:var(--sans); font-weight:600; color:var(--gold); font-size:0.78rem; letter-spacing:0.04em; text-transform:uppercase; display:block; margin-bottom:0.3rem;}
+  .formula-block .sub{ font-family:var(--sans); color:var(--text-light); font-size:0.8rem; margin-top:0.5rem; line-height:1.55; display:block; }
+  .formula-block .case{ color:var(--text-light); font-size:0.82rem; }
+
+  blockquote{ margin:1.8rem 0; padding:0.2rem 0 0.2rem 1.3rem; border-left:2px solid var(--gold); font-family:var(--serif); font-style:italic; color:var(--text-mid); font-size:1.15rem; }
+
+  .callout{ background:var(--paper-white); border:1px solid var(--border-paper); border-left:3px solid var(--steel); padding:1rem 1.3rem; margin:1.5rem 0; font-size:0.92rem; color:var(--text-mid); }
+  .callout strong{ color:var(--steel); }
+  .callout.gold{ border-left-color:var(--gold); }
+  .callout.gold strong{ color:var(--gold); }
+  .callout.teal{ border-left-color:var(--teal); }
+  .callout.teal strong{ color:var(--teal); }
+  .callout p:last-child{ margin-bottom:0; }
+
+  .question{ margin:2.2rem 0 1rem; padding:1.1rem 1.3rem; background:var(--paper-white); border:1px solid var(--border-paper); border-left:3px solid var(--gold); }
+  .question .q-label{ font-family:var(--mono); font-size:0.64rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--gold); margin-bottom:0.3rem; }
+  .question .q-text{ font-family:var(--serif); font-size:1.3rem; font-weight:600; color:var(--text-dark); line-height:1.35; }
+
+  ol.route{ list-style:none; margin:1.4rem 0 1.6rem; border-top:1px solid var(--border-paper); }
+  ol.route li{ display:grid; grid-template-columns:2.6rem 1fr; padding:0.55rem 0; border-bottom:1px solid var(--border-paper); font-size:0.92rem; color:var(--text-mid); }
+  ol.route li span{ font-family:var(--serif); font-size:1.15rem; color:var(--gold); opacity:0.7; line-height:1.4; }
+
+  /* ===== TABLE ===== */
+  .table-wrap{ overflow-x:auto; margin:1.4rem 0; }
+  table{ width:100%; border-collapse:collapse; font-size:0.9rem; }
+  th,td{ text-align:left; padding:0.65rem 0.6rem; border-bottom:1px solid var(--border-paper); vertical-align:top; }
+  th{ font-family:var(--mono); font-size:0.62rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-light); font-weight:500;}
+  td{ color:var(--text-mid); }
+  td.metric-name{ color:var(--text-dark); font-weight:600; font-family:var(--sans); }
+  td.mono{ font-family:var(--mono); font-size:0.82rem; color:var(--text-dark); }
+  tr:last-child td{ border-bottom:none; }
+
+  /* ===== CODE BLOCK ===== */
+  .codeblk{
+    font-family:var(--mono); background:var(--paper-white); border:1px solid var(--border-paper); border-left:3px solid var(--steel);
+    padding:1rem 1.3rem; margin:1.3rem 0; font-size:0.82rem; color:var(--text-dark); overflow-x:auto; line-height:1.75; white-space:pre;
+  }
+  .codeblk .c{ color:var(--text-light); font-style:italic; }
+  .codeblk .k{ color:var(--steel); }
+  .codeblk .s{ color:var(--teal); }
+  .codeblk .n{ color:var(--amber); }
+  .codeblk .d{ color:var(--gold); }
+
+  /* ===== FIGURE (paper) ===== */
+  .fig{ background:var(--paper-white); border:1px solid var(--border-paper); padding:1.2rem 1.4rem; margin:1.5rem 0; }
+  .bag-row{ display:flex; align-items:center; gap:0.45rem; flex-wrap:wrap; margin:0.45rem 0; }
+  .bag-row .w{ font-family:var(--mono); font-size:0.78rem; padding:0.18rem 0.55rem; border:1px solid var(--border-paper); background:var(--paper); color:var(--text-dark); }
+  .bag-row .arrow{ color:var(--text-light); margin:0 0.3rem; font-family:var(--mono); font-size:0.8rem; }
+  .bag-row .bag{ font-family:var(--mono); font-size:0.78rem; color:var(--gold); border:1px dashed var(--gold); padding:0.18rem 0.75rem; border-radius:999px; background:var(--gold-glow); }
+  .fig-cap{ font-size:0.8rem; color:var(--text-light); margin-top:0.7rem; line-height:1.55; }
+
+  /* ===== INTERACTIVE LABS (ink panels, shared) ===== */
+  .lab{ background:var(--ink); padding:1.6rem 1.5rem 1.8rem; margin:2rem 0 1rem; position:relative; overflow:hidden; }
+  .lab::before{ content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--gold); }
+  .lab-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:1.1rem; flex-wrap:wrap; gap:0.6rem; }
+  .lab-title{ font-family:var(--mono); font-size:0.72rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--gold); display:flex; align-items:center; gap:0.5rem; }
+  .lab-title .dot{ width:6px; height:6px; border-radius:50%; background:var(--gold); animation:blink 2s infinite; }
+  .lab-sub{ font-family:var(--mono); font-size:0.64rem; color:rgba(200,200,212,0.45); }
+  @keyframes blink{ 50%{ opacity:0.3; } }
+
+  .lab-btns{ display:flex; flex-wrap:wrap; gap:0.45rem; margin-bottom:0.9rem; align-items:center; }
+  .lab-btn{
+    font-family:var(--mono); font-size:0.68rem; letter-spacing:0.03em; padding:0.45rem 0.85rem;
+    border:1px solid rgba(201,168,76,0.3); border-radius:2px; background:rgba(255,255,255,0.02); color:var(--text-on-ink);
+    cursor:pointer; transition:all 0.2s;
+  }
+  .lab-btn:hover{ border-color:var(--gold); color:var(--gold); background:var(--gold-dim); }
+  .lab-btn.on{ background:var(--gold); color:var(--ink); border-color:var(--gold); }
+  .lab-btn.ghost{ border-color:rgba(255,255,255,0.12); }
+  .lab-btn:focus-visible, .tn:focus-visible, .tri .c:focus-visible{ outline:2px solid var(--gold); outline-offset:2px; }
+  .lab-label{ font-family:var(--mono); font-size:0.6rem; text-transform:uppercase; letter-spacing:0.08em; color:rgba(200,200,212,0.5); margin:0.2rem 0.4rem 0 0; }
+
+  .lab textarea{
+    width:100%; min-height:132px; font-family:var(--mono); font-size:0.82rem; line-height:1.6; tab-size:4;
+    background:rgba(255,255,255,0.04); border:1px solid var(--border-ink); color:var(--text-bright);
+    padding:0.8rem 1rem; resize:vertical; border-radius:0;
+  }
+  .lab textarea:focus{ outline:none; border-color:rgba(201,168,76,0.5); }
+  .lab-status{ font-family:var(--mono); font-size:0.64rem; color:rgba(200,200,212,0.5); margin:0.55rem 0 0.9rem; min-height:1rem; }
+  .lab-status.err{ color:var(--amber); }
+
+  .tree-host{ background:rgba(255,255,255,0.03); border:1px solid var(--border-ink); overflow-x:auto; padding:0.5rem 0; }
+  .tree-host svg{ display:block; margin:0 auto; }
+  .seq-label{ font-family:var(--mono); font-size:0.6rem; text-transform:uppercase; letter-spacing:0.08em; color:rgba(200,200,212,0.5); margin:1rem 0 0.4rem; }
+  .seq{ display:flex; flex-wrap:wrap; gap:0.3rem; min-height:1.7rem; }
+  .seq .chip{ font-family:var(--mono); font-size:0.64rem; padding:0.18rem 0.45rem; border:1px solid var(--border-ink); color:var(--text-on-ink); background:rgba(255,255,255,0.03); animation:chipIn .3s var(--ease); }
+  .seq .chip i{ font-style:normal; color:var(--gold); margin-right:0.3rem; opacity:0.8; }
+  @keyframes chipIn{ from{ opacity:0; transform:translateY(3px);} to{ opacity:1; transform:none; } }
+
+  .lab-info{
+    margin-top:1rem; padding:0.8rem 1rem; background:rgba(255,255,255,0.04); border:1px solid var(--border-ink);
+    font-family:var(--sans); font-size:0.82rem; color:rgba(200,200,212,0.75); line-height:1.55; min-height:2.6rem;
+    border-left:3px solid rgba(255,255,255,0.15); transition:border-color 0.25s ease;
+  }
+  .lab-info.active{ border-left-color:var(--gold); }
+  .lab-info strong{ color:var(--text-bright); font-weight:600; }
+  .lab-info code{ background:rgba(255,255,255,0.05); border-color:var(--border-ink); }
+  .lab-hint{ font-family:var(--mono); font-size:0.62rem; color:rgba(200,200,212,0.45); text-align:center; margin-top:0.8rem; }
+
+  /* tree svg */
+  .te{ fill:none; stroke:rgba(255,255,255,0.2); stroke-width:1.2; transition:stroke .2s, opacity .35s; }
+  .te.v{ stroke-dasharray:4 3; stroke:rgba(200,200,212,0.25); }
+  .te.path{ stroke:var(--gold); stroke-width:1.9; }
+  .tn{ cursor:pointer; transition:opacity .35s; outline:none; }
+  .tn rect{ fill:rgba(255,255,255,0.04); stroke:rgba(107,141,173,0.75); stroke-width:1.1; transition:all .2s; }
+  .tn.leaf rect{ stroke:rgba(91,166,138,0.8); }
+  .tn.root rect{ stroke:rgba(201,168,76,0.8); }
+  .tn.virtual{ cursor:default; }
+  .tn.virtual rect{ fill:none; stroke:rgba(200,200,212,0.35); stroke-dasharray:4 3; }
+  .tn.virtual .ty{ fill:rgba(200,200,212,0.5); font-style:italic; }
+  .tn:hover rect{ fill:rgba(255,255,255,0.09); }
+  .tn.path rect{ stroke:var(--gold); }
+  .tn.sel rect, .tn.hl rect{ fill:rgba(201,168,76,0.22); stroke:var(--gold); stroke-width:1.7; }
+  .tn .ty{ font-family:var(--sans); font-size:10.5px; font-weight:500; fill:var(--text-bright); text-anchor:middle; pointer-events:none; }
+  .tn .va{ font-family:var(--mono); font-size:9.5px; fill:var(--gold); text-anchor:middle; pointer-events:none; }
+  .pending{ opacity:0; }
+
+  /* explorer */
+  .ex-grid{ display:grid; grid-template-columns:1.1fr 1fr; gap:1.2rem; }
+  @media (max-width:720px){ .ex-grid{ grid-template-columns:1fr; } }
+  .pp{ background:rgba(255,255,255,0.03); border:1px solid var(--border-ink); padding:1.1rem 1.2rem; }
+  .pp-eyebrow{ font-family:var(--mono); font-size:0.6rem; text-transform:uppercase; letter-spacing:0.08em; color:rgba(200,200,212,0.55); margin-bottom:0.4rem; }
+  .pp-title{ font-family:var(--serif); font-size:1.4rem; font-weight:600; color:var(--text-bright); margin-bottom:0.3rem; }
+  .pp-tag{ font-family:var(--sans); font-size:0.8rem; color:rgba(200,200,212,0.65); font-style:italic; margin-bottom:0.8rem; line-height:1.5; }
+  .pp-row{ display:grid; grid-template-columns:4.8rem 1fr; gap:0.7rem; padding:0.6rem 0; border-top:1px solid var(--border-ink); font-size:0.78rem; }
+  .pp-k{ font-family:var(--mono); font-size:0.6rem; color:rgba(200,200,212,0.5); text-transform:uppercase; letter-spacing:0.06em; padding-top:3px; }
+  .pp-v{ color:rgba(200,200,212,0.85); line-height:1.55; min-width:0; }
+  .pp-v .m{ font-family:var(--mono); font-size:0.72rem; color:var(--text-bright); }
+  .coords{ display:flex; flex-wrap:wrap; gap:0.3rem; margin-bottom:0.35rem; }
+  .coord{ font-family:var(--mono); font-size:0.7rem; color:var(--ink); background:var(--gold); padding:0.1rem 0.42rem; }
+  .coord.last{ outline:1px solid var(--gold); outline-offset:2px; }
+  .hslots{ display:grid; grid-template-columns:repeat(8, 1fr); gap:3px; margin:0.15rem 0 0.4rem; }
+  .hs{ font-family:var(--mono); font-size:0.52rem; text-align:center; padding:0.32rem 0; border:1px dashed rgba(255,255,255,0.14); color:rgba(200,200,212,0.35); }
+  .hs.f{ border:1px solid rgba(201,168,76,0.6); background:var(--gold-dim); color:var(--gold); }
+  .neg{ color:var(--amber); }
+  .pos{ color:var(--teal); }
+
+  /* triangle */
+  .tri-wrap{ max-width:540px; margin:0 auto; }
+  .tri{ display:grid; grid-template-columns:1.5rem repeat(16, 1fr); gap:2px; }
+  .tri .c{ aspect-ratio:1; background:rgba(255,255,255,0.025); border:1px solid rgba(255,255,255,0.04); }
+  .tri .c.v{ background:rgba(91,166,138,0.22); border-color:rgba(91,166,138,0.45); cursor:pointer; transition:background .2s, border-color .2s; }
+  .tri .c.v.off{ background:rgba(255,255,255,0.03); border-color:rgba(255,255,255,0.07); }
+  .tri .c.v:hover{ border-color:var(--text-bright); }
+  .tri .c.used{ background:var(--gold) !important; border-color:var(--gold) !important; }
+  .tri .c.focus{ background:rgba(201,168,76,0.55) !important; border-color:var(--gold) !important; }
+  .tri .ax{ font-family:var(--mono); font-size:0.5rem; color:rgba(200,200,212,0.45); display:flex; align-items:center; justify-content:center; }
+  .tri-axis{ font-family:var(--mono); font-size:0.58rem; color:rgba(200,200,212,0.5); text-align:center; margin-top:0.4rem; letter-spacing:0.04em; }
+  .tri-axis.y{ text-align:left; margin:0 0 0.4rem; }
+  .tri-ctrl{ display:flex; align-items:center; gap:1rem; flex-wrap:wrap; margin-top:1.1rem; }
+  .tri-ctrl input[type=range]{ flex:1; min-width:160px; accent-color:var(--gold); }
+  .tri-count{ font-family:var(--serif); font-size:2rem; font-weight:700; color:var(--gold); line-height:1; }
+  .tri-count small{ font-family:var(--mono); font-size:0.6rem; font-weight:400; color:rgba(200,200,212,0.5); letter-spacing:0.05em; display:block; margin-top:0.25rem; text-transform:uppercase; }
+  .tri-legend{ display:flex; gap:1rem; flex-wrap:wrap; font-family:var(--mono); font-size:0.58rem; color:rgba(200,200,212,0.55); margin-top:0.8rem; }
+  .tri-legend span::before{ content:''; display:inline-block; width:9px; height:9px; margin-right:0.35rem; vertical-align:-1px; }
+  .tri-legend .l1::before{ background:rgba(91,166,138,0.35); border:1px solid rgba(91,166,138,0.6); }
+  .tri-legend .l2::before{ background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); }
+  .tri-legend .l3::before{ background:var(--gold); }
+
+  /* snippet A vs B */
+  .ab-grid{ display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+  @media (max-width:720px){ .ab-grid{ grid-template-columns:1fr; } }
+  .ab-col{ min-width:0; }
+  .ab-h{ font-family:var(--mono); font-size:0.66rem; letter-spacing:0.08em; text-transform:uppercase; color:var(--gold); margin-bottom:0.5rem; }
+  .ab-h span{ color:rgba(200,200,212,0.5); text-transform:none; letter-spacing:0.02em; }
+  pre.mini{ font-family:var(--mono); font-size:0.78rem; color:var(--text-bright); background:rgba(255,255,255,0.04); border:1px solid var(--border-ink); padding:0.7rem 0.9rem; line-height:1.6; overflow-x:auto; margin-bottom:0.7rem; }
+  pre.mini .k{ color:var(--steel); } pre.mini .n{ color:var(--amber); } pre.mini .z{ background:rgba(201,168,76,0.22); color:var(--gold); }
+  .tokstrip{ display:flex; flex-wrap:wrap; gap:0.25rem; margin-bottom:0.7rem; min-height:1.5rem; }
+  .tk{ font-family:var(--mono); font-size:0.62rem; padding:0.12rem 0.38rem; border:1px solid var(--border-ink); color:var(--text-on-ink); background:rgba(255,255,255,0.03); }
+  .tk.lay{ color:rgba(200,200,212,0.45); border-style:dashed; font-size:0.55rem; }
+  .tk.ded{ color:var(--ink); background:var(--gold); border:1px solid var(--gold); }
+  .ab-F{ font-family:var(--mono); font-size:0.68rem; color:var(--text-on-ink); margin-top:0.6rem; line-height:1.6; }
+  .ab-F b{ color:var(--gold); font-weight:500; }
+
+  /* pipeline figure */
+  .pipe-host{ overflow-x:auto; }
+  .pipe{ width:100%; min-width:560px; height:auto; display:block; }
+  .pipe .bx{ fill:rgba(255,255,255,0.035); stroke-width:1.1; }
+  .pipe .t{ font-family:var(--mono); font-size:10.5px; fill:var(--text-bright); text-anchor:middle; }
+  .pipe .h{ font-family:var(--mono); font-size:9px; letter-spacing:0.1em; text-anchor:middle; text-transform:uppercase; }
+  .pipe .ar{ fill:none; stroke-width:1.1; }
+
+  /* knowledge checks */
+  details.check{ background:var(--paper-white); border:1px solid var(--border-paper); border-left:3px solid var(--gold); padding:0.85rem 1.2rem; margin:0.8rem 0; }
+  details.check summary{ cursor:pointer; font-weight:600; color:var(--text-dark); font-size:0.94rem; list-style:none; display:flex; gap:0.7rem; align-items:baseline; }
+  details.check summary::-webkit-details-marker{ display:none; }
+  details.check summary::before{ content:'+'; font-family:var(--mono); color:var(--gold); font-weight:500; width:0.8rem; flex-shrink:0; }
+  details.check[open] summary::before{ content:'–'; }
+  details.check p{ margin:0.7rem 0 0 1.5rem; font-size:0.92rem; }
+
+  ul.refs{ list-style:none; margin:1rem 0 0; }
+  ul.refs li{ font-size:0.84rem; color:var(--text-mid); padding:0.45rem 0; border-bottom:1px solid var(--border-paper); line-height:1.55; }
+  ul.refs li:last-child{ border-bottom:none; }
+
+  /* ===== FOOTER ===== */
+  footer{ background:var(--ink); color:var(--text-on-ink); margin-top:3rem; }
+  .footer-inner{ max-width:var(--max-w); margin:0 auto; padding:2.6rem 2rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; }
+  .footer-left{ font-family:var(--serif); font-size:1.1rem; }
+  .footer-left span{ color:var(--gold); }
+  .footer-links{ display:flex; gap:1.3rem; }
+  .footer-links a{ font-size:0.8rem; color:var(--text-on-ink); opacity:0.6; }
+  .footer-links a:hover{ opacity:1; color:var(--gold); text-decoration:none; }
+  .footer-note{ max-width:var(--max-w); margin:0 auto; padding:0 2rem 1.6rem; font-family:var(--mono); font-size:0.62rem; color:rgba(200,200,212,0.3); }
+
+  @media (max-width:640px){
+    .hero h1{ font-size:2.1rem; }
+    .hero-dek{ font-size:1.05rem; }
+    .hero-tree{ display:none; }
+    .content{ padding:0 1.2rem; }
+    .topbar-inner{ padding:0 1.2rem; }
+    .hero-inner{ padding:0 1.2rem; }
+    .lab{ padding:1.3rem 1rem 1.5rem; }
+    .pp-row{ grid-template-columns:1fr; gap:0.2rem; }
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{ animation:none !important; transition:none !important; }
+    html{ scroll-behavior:auto; }
+  }
+
+  /* ===== PART 2 ADDITIONS ===== */
+  .series-nav{ display:flex; justify-content:space-between; gap:1rem; flex-wrap:wrap; font-family:var(--mono); font-size:0.68rem; letter-spacing:0.04em; margin:0 0 1.8rem; }
+  .series-nav a{ color:var(--text-light); }
+  .series-nav a:hover{ color:var(--gold); }
+  .series-nav .here{ color:var(--gold); }
+
+  .stage-tag{ font-family:var(--mono); font-size:0.62rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-light); margin:3.2rem 0 -2.2rem; }
+
+  /* rule stepper */
+  .step-grid{ display:grid; grid-template-columns:1.25fr 1fr; gap:1.1rem; }
+  @media (max-width:760px){ .step-grid{ grid-template-columns:1fr; } }
+  .rules{ width:100%; border-collapse:collapse; font-size:0.74rem; }
+  .rules th{ white-space:nowrap; font-family:var(--mono); font-size:0.56rem; color:rgba(200,200,212,0.5); border-bottom:1px solid var(--border-ink); padding:0.35rem 0.4rem; text-align:left; }
+  .rules td{ font-family:var(--mono); color:rgba(200,200,212,0.35); border-bottom:1px solid rgba(255,255,255,0.04); padding:0.32rem 0.4rem; vertical-align:middle; white-space:nowrap; }
+  .rules tr.done td{ color:var(--text-on-ink); }
+  .rules tr.now td{ color:var(--ink); background:var(--gold); }
+  .rules tr.win-tree td{ background:rgba(201,168,76,0.22); color:var(--text-bright); }
+  .rules tr.win-seq td{ background:rgba(107,141,173,0.25); color:var(--text-bright); }
+  .rules tr.win-self td{ background:var(--gold); color:var(--ink); }
+  .rules tr{ cursor:default; }
+  .rules tr.clickable{ cursor:pointer; }
+  .dbar{ display:inline-block; height:7px; background:var(--teal); vertical-align:middle; margin-right:0.35rem; opacity:0.85; }
+  .rules tr.now .dbar, .rules tr.win-self .dbar{ background:var(--ink); }
+  .stepper-ctrl{ display:flex; gap:0.45rem; flex-wrap:wrap; align-items:center; margin-bottom:0.9rem; }
+  .step-count{ font-family:var(--mono); font-size:0.64rem; color:rgba(200,200,212,0.6); margin-left:auto; }
+  .legend-row{ display:flex; gap:1rem; flex-wrap:wrap; font-family:var(--mono); font-size:0.58rem; color:rgba(200,200,212,0.55); margin-top:0.7rem; }
+  .legend-row span::before{ content:''; display:inline-block; width:9px; height:9px; margin-right:0.35rem; vertical-align:-1px; }
+  .legend-row .lg-gold::before{ background:rgba(201,168,76,0.5); border:1px solid var(--gold); }
+  .legend-row .lg-steel::before{ background:rgba(107,141,173,0.35); border:1px solid var(--steel); }
+  .legend-row .lg-path::before{ background:none; border-bottom:2px solid var(--gold); height:5px; }
+
+  /* mixer */
+  .mix-grid{ display:grid; grid-template-columns:1fr 1.15fr; gap:1.2rem; }
+  @media (max-width:760px){ .mix-grid{ grid-template-columns:1fr; } }
+  .ctrl{ margin-bottom:1rem; }
+  .ctrl-label{ font-family:var(--mono); font-size:0.6rem; text-transform:uppercase; letter-spacing:0.08em; color:rgba(200,200,212,0.55); margin-bottom:0.4rem; display:flex; justify-content:space-between; }
+  .ctrl-label b{ color:var(--gold); font-weight:500; }
+  .ctrl input[type=range]{ width:100%; accent-color:var(--gold); }
+  .ctrl .lab-btns{ margin-bottom:0; }
+  .vec-block{ margin-bottom:0.9rem; }
+  .vec-name{ font-family:var(--mono); font-size:0.6rem; color:rgba(200,200,212,0.6); margin-bottom:0.3rem; }
+  .vec{ display:grid; grid-template-columns:repeat(8, 1fr); gap:3px; height:64px; }
+  .vcell{ position:relative; background:rgba(255,255,255,0.03); }
+  .vcell::after{ content:''; position:absolute; left:0; right:0; top:50%; border-top:1px solid rgba(255,255,255,0.12); }
+  .vbar{ position:absolute; left:15%; right:15%; transition:all .25s var(--ease); }
+  .vbar.pos{ bottom:50%; }
+  .vbar.neg{ top:50%; }
+  .vec.old .vbar{ background:var(--steel); }
+  .vec.new .vbar{ background:var(--gold); }
+  .meter{ display:flex; align-items:flex-end; gap:1.4rem; flex-wrap:wrap; margin:0.4rem 0 0.2rem; }
+  .meter-num{ font-family:var(--serif); font-size:2.2rem; font-weight:700; color:var(--gold); line-height:1; }
+  .meter-num small{ display:block; font-family:var(--mono); font-size:0.56rem; font-weight:400; color:rgba(200,200,212,0.5); letter-spacing:0.06em; text-transform:uppercase; margin-top:0.3rem; }
+  .meter-num.soft{ color:var(--text-bright); font-size:1.5rem; }
+  .verdict{ font-size:0.8rem; color:rgba(200,200,212,0.8); margin-top:0.7rem; line-height:1.5; padding-left:0.7rem; border-left:2px solid var(--gold); }
+  .verdict.bad{ border-left-color:var(--amber); }
+  .verdict.ok{ border-left-color:var(--teal); }
+
+  /* tensor builder */
+  .tens-wrap{ overflow-x:auto; border:1px solid var(--border-ink); background:rgba(255,255,255,0.02); margin-top:1rem; }
+  table.tens{ border-collapse:collapse; font-family:var(--mono); font-size:0.66rem; min-width:100%; }
+  table.tens th{ position:sticky; left:0; background:var(--ink-light); color:rgba(200,200,212,0.55); font-weight:400; text-align:left; padding:0.4rem 0.6rem; font-size:0.56rem; text-transform:uppercase; letter-spacing:0.06em; white-space:nowrap; border-bottom:1px solid var(--border-ink); z-index:1; }
+  table.tens td{ padding:0.4rem 0.5rem; text-align:center; color:var(--text-on-ink); border-bottom:1px solid rgba(255,255,255,0.04); border-left:1px solid rgba(255,255,255,0.04); white-space:nowrap; cursor:pointer; }
+  table.tens tr.tokrow td{ color:var(--text-bright); font-weight:500; }
+  table.tens td.special{ color:rgba(200,200,212,0.4); }
+  table.tens td.on{ background:rgba(201,168,76,0.22); color:var(--gold); }
+  table.tens td.share{ box-shadow:inset 0 -2px 0 var(--teal); }
+  table.tens tr.idrow td{ color:var(--gold); }
+
+  /* route chooser */
+  .q-row{ display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap; margin-bottom:0.7rem; }
+  .q-row .q{ font-family:var(--sans); font-size:0.82rem; color:var(--text-bright); min-width:13rem; }
+  table.routes{ width:100%; border-collapse:collapse; margin-top:1.1rem; font-size:0.76rem; }
+  table.routes th, table.routes td{ border:1px solid var(--border-ink); padding:0.55rem 0.6rem; vertical-align:top; color:rgba(200,200,212,0.75); }
+  table.routes th{ font-family:var(--mono); font-size:0.6rem; color:var(--text-bright); font-weight:500; letter-spacing:0.03em; text-align:left; }
+  table.routes td.k{ font-family:var(--mono); font-size:0.58rem; text-transform:uppercase; letter-spacing:0.05em; color:rgba(200,200,212,0.5); width:7.5rem; }
+  table.routes .pri{ background:rgba(201,168,76,0.14); color:var(--text-bright); }
+  table.routes th.pri{ background:var(--gold); color:var(--ink); }
+  table.routes .sec{ background:rgba(91,166,138,0.10); }
+  table.routes th.sec{ background:rgba(91,166,138,0.35); }
+
+  /* checklist */
+  .checks{ list-style:none; }
+  .checks li{ display:grid; grid-template-columns:1.5rem 1fr; gap:0.6rem; padding:0.65rem 0; border-bottom:1px solid var(--border-ink); }
+  .checks li:last-child{ border-bottom:none; }
+  .checks input{ appearance:none; -webkit-appearance:none; width:1.05rem; height:1.05rem; border:1px solid rgba(201,168,76,0.55); margin-top:0.15rem; cursor:pointer; display:grid; place-content:center; background:transparent; }
+  .checks input:checked{ background:var(--gold); }
+  .checks input:checked::after{ content:'✓'; color:var(--ink); font-size:0.75rem; font-weight:700; line-height:1; }
+  .checks input:focus-visible{ outline:2px solid var(--gold); outline-offset:2px; }
+  .checks label{ cursor:pointer; font-size:0.82rem; color:rgba(200,200,212,0.85); line-height:1.55; }
+  .checks label b{ color:var(--text-bright); font-weight:600; }
+  .checks li.done label{ color:rgba(200,200,212,0.45); }
+  .checks li.done label b{ color:rgba(200,200,212,0.6); }
+  .progress{ height:4px; background:rgba(255,255,255,0.06); margin:0.2rem 0 1rem; }
+  .progress div{ height:100%; background:var(--gold); width:0; transition:width .3s var(--ease); }
+
+  .pipeline-steps{ counter-reset:ps; list-style:none; margin:1.2rem 0 1.6rem; border-top:1px solid var(--border-paper); }
+  .pipeline-steps li{ counter-increment:ps; display:grid; grid-template-columns:2.6rem 1fr; padding:0.7rem 0; border-bottom:1px solid var(--border-paper); font-size:0.92rem; color:var(--text-mid); }
+  .pipeline-steps li::before{ content:counter(ps); font-family:var(--serif); font-size:1.25rem; color:var(--gold); opacity:0.75; line-height:1.4; }
+  .pipeline-steps li strong{ display:block; color:var(--text-dark); }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="topbar-name">Aakash <span>Vanmali</span></div>
+    <div class="topbar-links">
+      <a href="index.html">Writing</a>
+      <a href="../index.html">Portfolio</a>
+    </div>
+  </div>
+</div>
+
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-eyebrow">Notebook · Code Representation · Part 2</div>
+    <h1>Retrofitting Trees into Pretrained Transformers</h1>
+    <p class="hero-dek">Study notes on how TreeGen (2020) and Bartkowiak &amp; Graliński (2025) get tree positions into a model — and a practical mental model for building it yourself.</p>
+    <div class="hero-meta">Pretraining · Grammar rules · Depth embeddings · Token–node alignment · Do-no-harm init</div>
+  </div>
+  <svg class="hero-tree" viewBox="0 0 210 150" aria-hidden="true">
+    <line x1="105" y1="20" x2="55" y2="70"/><line x1="105" y1="20" x2="155" y2="70"/>
+    <line x1="55" y1="70" x2="25" y2="120"/><line x1="55" y1="70" x2="85" y2="120"/><line x1="155" y1="70" x2="155" y2="120"/>
+    <circle cx="105" cy="20" r="9"/><circle cx="55" cy="70" r="9"/><circle cx="155" cy="70" r="9"/>
+    <circle cx="25" cy="120" r="9"/><circle cx="85" cy="120" r="9"/><circle cx="155" cy="120" r="9"/>
+    <text x="132" y="18">(1,1)</text><text x="28" y="56">(2,1)</text><text x="182" y="56">(2,2)</text>
+    <text x="25" y="144">(3,1)</text><text x="85" y="144">(3,2)</text><text x="155" y="144">(3,1)</text>
+  </svg>
+</div>
+
+<div class="content">
+  <article>
+
+    <div class="series-nav">
+      <a href="tree-positional-encoding.html">← Part 1 · Teaching a Transformer to see trees</a>
+      <span class="here">Part 2 · Retrofitting</span>
+    </div>
+
+    <p class="lead">Part 1 ended with a Transformer that reads code as a tree. Then I hit an obvious question I'd been avoiding: Peng et al. trained their model from scratch. Almost nobody does that anymore. Can you take a model that has already been trained — one that already knows a lot about code — and teach it about trees after the fact?</p>
+
+    <p>These notes follow that question through two papers. <a href="https://arxiv.org/abs/1911.09983" target="_blank">TreeGen</a> (Sun et al., AAAI 2020) came first and showed the simplest place to put tree information. <a href="https://arxiv.org/abs/2507.04003" target="_blank">Bartkowiak &amp; Graliński</a> (2025) took that idea and bolted it onto a pretrained code model. After that, I try to turn everything from both parts into a mental model for actually building one. As before, nothing is assumed: every new idea gets built from the ground up, and there are five labs to poke at along the way.</p>
+
+    <div class="callout gold"><strong>Carried over from Part 1.</strong> Transformers are order-blind, so they need positional information. Code's real order is a tree (its <em>AST</em>), not a line. Peng et al. describe each node by its path from the root as a list of (sibling order, child count) coordinates, and feed that into attention twice: a global vector per node, and a local vector per parent–child edge. If any of that is new, <a href="tree-positional-encoding.html">Part 1</a> builds it step by step.</div>
+
+    <ol class="route">
+      <li><span>06</span>What a pretrained model is, and why adding to one is delicate</li>
+      <li><span>07</span>TreeGen: writing code one grammar rule at a time</li>
+      <li><span>08</span>Bartkowiak: two small tables bolted onto CodeBERTa</li>
+      <li><span>09</span>Three doors for structure, and which one to use</li>
+      <li><span>10</span>Building it: a practical implementation mental model</li>
+    </ol>
+
+    <!-- ================= 06 ================= -->
+    <div class="section-header">
+      <span class="section-number">06</span>
+      <span class="section-title">What "pretrained" means — and why it complicates things</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>The first wall in this part wasn't about trees at all. Both papers lean on words like <em>pretrained</em>, <em>fine-tuning</em> and <em>masked language modelling</em> as if everyone knows them. I half did. So, from the beginning.</p>
+
+    <p>A neural network is a large pile of numbers called <strong>weights</strong>. Training means nudging those numbers, millions of times, until the network's outputs get good at some task. Starting from random numbers, that takes enormous amounts of data and compute.</p>
+
+    <p><strong>Pretraining</strong> is the trick of doing that expensive training once, on a huge generic task, so the weights soak up general knowledge. <strong>Fine-tuning</strong> is taking those already-trained weights and training them a little more on the task you actually care about. It's the difference between hiring someone who already reads code fluently and teaching someone the alphabet first.</p>
+
+    <h3 class="sub">The pretraining game: fill in the blanks</h3>
+
+    <p>For code models, a common pretraining task is <strong>masked language modelling</strong> (MLM). Take a snippet, hide some of its tokens — typically around 15% — and ask the model to guess what was there:</p>
+
+    <div class="codeblk"><span class="k">def</span> <span class="f">normalize</span>(a, b):
+    <span class="k">return</span> a <span class="d">[MASK]</span> b          <span class="c"># the model should guess "+"</span></div>
+
+    <p>No labels need to be written by hand: the hidden token <em>is</em> the label. That's why it scales to millions of functions. To guess well, the model has to learn what code tends to look like — that an operator sits between two operands, that a variable defined above gets used below.</p>
+
+    <p>The model both papers' story leads to is <strong>CodeBERTa</strong>, a small model of this kind released by Hugging Face. It follows the <strong>RoBERTa</strong> recipe (a refined version of BERT) and was trained on CodeSearchNet, a large collection of functions from public code in six languages. The "small" version Bartkowiak &amp; Graliński use has 6 Transformer layers and about 83.5 million weights.</p>
+
+    <h3 class="sub">Where the input enters: the embedding layer</h3>
+
+    <p>This is the part that matters most for retrofitting, so it's worth slowing down. Before any attention happens, a RoBERTa-style model turns each token into one vector by adding three learned embeddings, then normalizing:</p>
+
+    <div class="formula-block"><span class="name">RoBERTa's input embedding</span>xᵢ = LayerNorm( word_emb(tokenᵢ) + position_emb(i) + type_emb(0) )<span class="sub">word: what the token is · position: where it is in the sequence (Part 1's sequential position) · type: a segment marker that's effectively constant here · LayerNorm rescales the sum to a standard spread.</span></div>
+
+    <p>Every weight above this layer was trained on vectors made exactly this way. That's the whole problem in one sentence.</p>
+
+    <h3 class="sub">Why adding to a trained model is delicate</h3>
+
+    <p>Suppose I add a fourth embedding — a tree position — into that sum. If its table starts with random numbers, every input vector suddenly shifts. The six layers above it were tuned for the old vectors and now receive something they've never seen. Two things can go wrong. The new signal can scramble the input so badly that training has to relearn what the model already knew (this loss of prior knowledge is called <strong>catastrophic forgetting</strong>). Or, if the new signal is too faint, the model can learn to ignore it.</p>
+
+    <p>So the goal of a retrofit is narrow: <strong>start exactly where the pretrained model was, then let the new structure grow in.</strong> Hold on to that sentence — it decides almost every design choice in Sections 08 and 10.</p>
+
+    <div class="callout"><strong>Why not just retrofit Peng's method?</strong> You can, but it's invasive. Peng et al. add new terms inside the attention score of every layer, each with its own projection matrices, and change the score's scaling. A pretrained model's attention was calibrated without any of that. Nothing makes it impossible — Section 10 sketches how — but it's surgery inside every layer rather than a change at the entrance. That contrast is what made the next two papers click for me.</div>
+
+    <!-- ================= 07 ================= -->
+    <div class="section-header">
+      <span class="section-number">07</span>
+      <span class="section-title">TreeGen: writing code one grammar rule at a time</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>TreeGen (Sun, Zhu, Xiong, Sun, Mou and Zhang, AAAI 2020) isn't a retrofit — it's trained from scratch, on a small dataset. It's in these notes because it shows, very cleanly, the cheapest place to put tree information. Bartkowiak's paper reuses exactly that place five years later.</p>
+
+    <p>TreeGen's job is <strong>code generation</strong>: read a description in English and write the program. Its main benchmark, HearthStone, pairs the text of a card from the card game with the Python class that implements it — only 533 training examples, averaging about 83 code tokens each. Generation is harder than understanding in one specific way: the model has to produce a tree that doesn't exist yet. TreeGen's answer is to stop writing tokens and start writing <em>grammar rules</em>.</p>
+
+    <h3 class="sub">Grammar rules, from zero</h3>
+
+    <p>A programming language's grammar is a set of rewriting rules. Each one says how a kind of node can be expanded into its children:</p>
+
+    <div class="formula-block"><span class="name">A grammar rule</span>α → β₁ β₂ … βₖ<span class="sub">α is the parent (a node that still needs expanding). β₁…βₖ are its children. Example: Assign → targets value.</span></div>
+
+    <p>Nodes that still need expanding are <strong>non-terminals</strong>. Nodes that are actual text in the program — a name like <code>length</code>, a number like <code>10</code> — are <strong>terminals</strong>. Writing a program then becomes a loop: find the leftmost non-terminal that hasn't been expanded, pick a rule for it, repeat until only terminals are left. Each pick is a classification over the list of possible rules. The order of the picks is the depth-first (pre-order) walk from Part 1.</p>
+
+    <p>Here's that loop for the tiny program <code>length = 10</code>, with a slightly simplified grammar in the spirit of the paper's own example. Step through it.</p>
+
+    <!-- LAB 1: GRAMMAR STEPPER -->
+    <div class="lab" id="stepLab">
+      <div class="lab-head">
+        <div class="lab-title"><span class="dot"></span> Rule lab — generating length = 10</div>
+        <div class="lab-sub">step through, then click nodes</div>
+      </div>
+      <div class="stepper-ctrl">
+        <button class="lab-btn ghost" id="stBack">← Back</button>
+        <button class="lab-btn on" id="stNext">Next rule →</button>
+        <button class="lab-btn ghost" id="stPlay">Play</button>
+        <button class="lab-btn ghost" id="stReset">Reset</button>
+        <span class="step-count" id="stCount"></span>
+      </div>
+      <div class="step-grid">
+        <div class="tree-host" id="stTree"></div>
+        <div>
+          <table class="rules" id="stRules">
+            <thead><tr><th>pos i</th><th>rule rᵢ</th><th>depth dᵢ</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="legend-row"><span class="lg-path">query path to the node being expanded</span><span class="lg-gold">tree window (node + parent + grandparent)</span><span class="lg-steel">sequence window (rules i−1, i+1)</span></div>
+      <div class="lab-info" id="stInfo"></div>
+    </div>
+
+    <p>Two things are worth noticing in that table, and they're the two halves of TreeGen's idea.</p>
+
+    <h3 class="sub">Half one: a depth embedding at the input</h3>
+
+    <p>TreeGen's <strong>AST reader</strong> is a stack of Transformer-style blocks that reads the rules generated so far. Each rule gets an input vector made of three added parts:</p>
+
+    <div class="formula-block"><span class="name">TreeGen's AST-reader input</span>inputᵢ = rᵢ + pᵢ + dᵢ<span class="sub">rᵢ: embedding of which rule it is · pᵢ: position embedding (when the rule was used — Part 1's sequential position) · dᵢ: depth embedding — a table lookup on the depth of the node α that the rule expands.</span></div>
+
+    <p>The paper's reasoning is the same one Part 1 opened with: a position embedding says <em>when</em> a rule was used, not <em>where</em> it sits in the tree. Look at rules 7 and 8 in the lab. They are neighbours in the sequence, yet the depth falls from 7 back to 5. That drop is the model's only direct hint that the left branch is finished and it has climbed back up to fill in <code>value</code>. Without dᵢ, it would have to infer the climb from the content of the rules alone.</p>
+
+    <p>Notice how cheap this is: one more embedding table, one more term in a sum, right where the data enters. Compare that with Peng's coordinate lists and attention terms. TreeGen's depth is much less information, but it costs almost nothing and touches nothing else.</p>
+
+    <h3 class="sub">Half two: tree convolution</h3>
+
+    <p>Depth alone says how deep a node is, not who its relatives are. TreeGen adds a second mechanism inside the AST reader: <strong>tree convolution</strong>. A regular convolution mixes each item with its neighbours in a sequence. Tree convolution mixes each node with its <em>ancestors</em>.</p>
+
+    <p>The trick is an <strong>adjacency matrix</strong> M: a grid with Mⱼᵢ = 1 if node i is the parent of node j, and 0 everywhere else. Multiplying all node features by M hands every node its parent's features. Multiplying twice hands it its grandparent's.</p>
+
+    <div class="formula-block"><span class="name">Tree convolution (window of 3)</span>Y′ = GELU( W · [ Y ; Y·M ; Y·M² ] )<span class="sub">Each node's new features are a learned mix of itself, its parent and its grandparent. TreeGen uses a window of 3. The root has no parent, so it borrows its own features.</span></div>
+
+    <p>Once the lab has generated the whole tree, click a non-terminal node — say <code>value</code>, or row 8. The gold rows are what tree convolution mixes; the blue rows are what an ordinary sequence convolution would mix. For rule 8, the sequence neighbours are the rule that wrote the name <code>"length"</code> and the rule that follows it. The tree neighbours are the <code>Assign</code> and <code>body</code> rules that actually own it.</p>
+
+    <p>One design choice I found genuinely insightful: TreeGen puts tree convolution only in the <em>first</em> few blocks, not all of them. The authors' reasoning is that as vectors pass through more Transformer blocks, each node mixes in information from every other node and gradually loses its own identity. Structural mixing works best while each vector still mostly describes its own node.</p>
+
+    <h3 class="sub">The query is a path</h3>
+
+    <p>To choose the next rule, TreeGen's decoder needs to know which node it's about to expand. It represents that node as the path from the root down to it — for <code>Assign</code>, that's root, Module, body, Assign. That's the gold path in the lab. If it looks familiar, it should: it's the same "describe a node by its route from the root" idea that Peng et al. turned into coordinate lists two years later.</p>
+
+    <h3 class="sub">Did it work?</h3>
+
+    <p>On HearthStone, TreeGen generated the exact reference program for 31.8% of test cards, against 27.3% for the best earlier method. A plain Transformer managed 10.6%. That 21-point gap isn't all down to tree structure — the plain baseline also lacks TreeGen's character embeddings and rule encodings — but the ablations isolate some of it: removing tree convolution alone dropped exact-match accuracy to 27.3%.</p>
+
+    <div class="callout gold"><strong>What TreeGen hands to a retrofit.</strong> TreeGen has two kinds of tree machinery. Tree convolution is new architecture: you can't add it to a pretrained model without new layers and lots of retraining. The depth embedding is different. It's one table added into the input sum — and every pretrained Transformer already has an input sum. That's the door Bartkowiak walks through.</div>
+
+    <!-- ================= 08 ================= -->
+    <div class="section-header">
+      <span class="section-number">08</span>
+      <span class="section-title">Bartkowiak: two small tables bolted onto CodeBERTa</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>Patryk Bartkowiak and Filip Graliński (Adam Mickiewicz University) published <a href="https://aclanthology.org/2025.xllm-1.10/" target="_blank">Seamlessly Integrating Tree-Based Positional Embeddings into Transformer Models for Source Code Representation</a> at an ACL 2025 workshop. The pitch is right there in "seamlessly": take CodeBERTa-small, leave every layer alone, and add tree information at the input.</p>
+
+    <h3 class="sub">Two numbers per node</h3>
+
+    <p>Their tree position keeps just two numbers for each node: its <strong>depth</strong> and its <strong>sibling index</strong>. The root is (1, 1). Every other node takes its parent's depth plus one, and its own position among its siblings:</p>
+
+    <div class="formula-block"><span class="name">Bartkowiak &amp; Graliński's tree position</span>F(root) = (1, 1)
+<br>F(x) = ( depth of parent + 1,&nbsp;&nbsp;iₓ )<span class="sub">iₓ = x's index among its siblings. Each of the two numbers gets its own learned embedding table.</span></div>
+
+    <p>Set that next to Peng's description from Part 1. Peng keeps the <em>whole path</em> as a list of (sibling order, child count) pairs. Bartkowiak keeps only how deep you are and which child you are at the last step. That's lossy. In Part 1's A–F tree, nodes D and F are both "depth 3, first child", so they get identical positions here, while Peng's lists tell them apart. The trade is simplicity: two lookups per node, no lists, no padding, nothing new inside attention. (The tiny tree in the header shows exactly this collision on its bottom row.)</p>
+
+    <h3 class="sub">The problem nobody warned me about: tokens aren't nodes</h3>
+
+    <p>Peng's and TreeGen's models consume AST nodes directly. CodeBERTa doesn't. It consumes <strong>subword tokens</strong> from a byte-pair-encoding (BPE) tokenizer: a scheme that splits text into frequent chunks, so a rare identifier like <code>normalize</code> might become <code>normal</code> + <code>ize</code>, and <code>):</code> might be a single token. Token boundaries come from frequency statistics, not from the grammar. To give each token a tree position, you need to <strong>align</strong> tokens to nodes.</p>
+
+    <p>For parsing, the authors use <strong>Tree-Sitter</strong>, a fast parser that supports many languages. Every node it produces records exactly which span of the source text it covers, which makes alignment possible: a token gets the position of the node whose span contains it. The paper notes that Tree-Sitter's output aligns well with the tokenizer's but doesn't spell out the edge cases. Section 10 has a lab for exactly that.</p>
+
+    <h3 class="sub">Three ways to mix the new embeddings in</h3>
+
+    <p>Now there are five embeddings for each token — word, position, type, depth, sibling — and they need to become one input vector. The paper compares three strategies:</p>
+
+    <div class="table-wrap"><table>
+      <thead><tr><th>Strategy</th><th>What it does</th><th>Trade-off</th></tr></thead>
+      <tbody>
+        <tr><td class="metric-name">Sum</td><td>Add depth and sibling embeddings to the usual sum, like TreeGen.</td><td>Cheapest. No way to balance old and new signals.</td></tr>
+        <tr><td class="metric-name">Weighted sum</td><td>Multiply each embedding by a learnable weight before adding.</td><td>Lets training turn each signal up or down.</td></tr>
+        <tr><td class="metric-name">Concatenation</td><td>Stack the embeddings side by side into a longer vector, then a linear layer projects it back to the model's width.</td><td>Most expressive. More parameters, and the projection is brand new.</td></tr>
+      </tbody>
+    </table></div>
+
+    <p>Section 06's rule — start where the pretrained model was — predicts how these behave at the very first step of training. The lab below lets you check that prediction on a toy 8-number vector. The steel bars are what CodeBERTa's layers were trained to receive; the gold bars are what they receive after the retrofit. The cosine similarity measures how alike the two are (1.0 means identical direction; LayerNorm makes the overall scale irrelevant).</p>
+
+    <!-- LAB 2: EMBEDDING MIXER -->
+    <div class="lab" id="mixLab">
+      <div class="lab-head">
+        <div class="lab-title"><span class="dot"></span> Mixer lab — what the pretrained layers see on step one</div>
+        <div class="lab-sub">toy 8-dimensional vectors</div>
+      </div>
+      <div class="mix-grid">
+        <div>
+          <div class="ctrl">
+            <div class="ctrl-label">Strategy</div>
+            <div class="lab-btns" id="mixStrat">
+              <button class="lab-btn on" data-s="sum">Sum</button>
+              <button class="lab-btn" data-s="wsum">Weighted sum</button>
+              <button class="lab-btn" data-s="cat">Concat → project</button>
+            </div>
+          </div>
+          <div class="ctrl">
+            <div class="ctrl-label">New tables' starting values <b id="mixSigmaV">random, scale 1.0</b></div>
+            <input type="range" id="mixSigma" min="0" max="15" value="10" aria-label="Initial scale of new embedding tables">
+          </div>
+          <div class="ctrl" id="mixWCtrl" hidden>
+            <div class="ctrl-label">Weight on depth + sibling <b id="mixWV">0.50</b></div>
+            <input type="range" id="mixW" min="0" max="100" value="50" aria-label="Weight on tree embeddings">
+          </div>
+          <div class="ctrl" id="mixPCtrl" hidden>
+            <div class="ctrl-label">Projection starts as</div>
+            <div class="lab-btns" id="mixProj">
+              <button class="lab-btn" data-p="rand">Random matrix</button>
+              <button class="lab-btn on" data-p="id">Pass-through [ I | 0 | 0 ]</button>
+            </div>
+          </div>
+          <div class="lab-btns"><button class="lab-btn ghost" id="mixReroll">New random vectors</button></div>
+        </div>
+        <div>
+          <div class="vec-block"><div class="vec-name">What CodeBERTa was trained to receive: LN(word + position)</div><div class="vec old" id="vecOld"></div></div>
+          <div class="vec-block"><div class="vec-name">What it receives after the retrofit</div><div class="vec new" id="vecNew"></div></div>
+          <div class="meter">
+            <div class="meter-num" id="mixCos">1.00<small>cosine similarity</small></div>
+            <div class="meter-num soft" id="mixShare">0%<small>tree share of the input</small></div>
+          </div>
+          <div class="verdict" id="mixVerdict"></div>
+        </div>
+      </div>
+    </div>
+
+    <p>Three lessons fell out of playing with that. First, plain sum with randomly initialized tables shifts the input a lot — in the toy, the tree part makes up around half of what goes in. Second, slide the starting values to zero and every strategy becomes harmless: the model begins as exactly the pretrained model, and gradients can still grow the tables from there. Third, concatenation is only safe if the new projection starts as a pass-through; start it random and the pretrained layers are reading a different language on step one.</p>
+
+    <div class="callout"><strong>A caveat on the lab.</strong> It's a picture of step one, not of training. The paper doesn't say how its new tables were initialized, and a model can recover from a rough start given enough training. The point is the direction of the risk, not a prediction of their numbers.</div>
+
+    <h3 class="sub">How they trained it</h3>
+
+    <p>The recipe has two stages, and both are standard. First, continue MLM pretraining on CodeSearchNet, now with the tree embeddings switched on, so the model learns to use them. Then fine-tune on <strong>clone detection</strong> — given two snippets, decide whether they do the same thing — using a dataset of roughly 600,000 code pairs. Both stages ran for three epochs with the AdamW optimizer, a learning rate of 1 × 10⁻⁵ and batches of 32, over three random seeds.</p>
+
+    <p>The new tables add about 789,504 weights, under 1% of the model. A detail I worked out myself rather than read in the paper: that number is exactly 2 × 514 × 768, which is consistent with two tables shaped like RoBERTa's own position table (514 rows of 768 numbers).</p>
+
+    <p>The paper also describes a <strong>tree attention mask</strong>, meant to steer attention toward structurally related tokens. In their experiments it's applied only to special tokens and the details are thin, so I'm leaving it out of these notes.</p>
+
+    <h3 class="sub">What they found — read carefully</h3>
+
+    <div class="table-wrap"><table>
+      <thead><tr><th>Embedding strategy</th><th>MLM accuracy</th><th>Clone-detection accuracy</th></tr></thead>
+      <tbody>
+        <tr><td class="metric-name">Original CodeBERTa</td><td class="mono">0.8972</td><td class="mono">0.9173</td></tr>
+        <tr><td class="metric-name">Sum</td><td class="mono">0.9021</td><td class="mono">0.9159</td></tr>
+        <tr><td class="metric-name">Weighted sum</td><td class="mono">0.9029</td><td class="mono">0.9187</td></tr>
+        <tr><td class="metric-name">Concatenation</td><td class="mono">0.9026</td><td class="mono">0.9063</td></tr>
+      </tbody>
+    </table></div>
+
+    <p>Weighted sum wins both tasks, and the authors report seed-to-seed spread below 0.002. On MLM, all three strategies gain about half a point. On clone detection the picture is more mixed: weighted sum gains 0.14 points, plain sum loses a little, and concatenation loses more than a full point. That's a pattern the mixer lab would predict — concatenation introduces the most brand-new machinery.</p>
+
+    <p>Their most interesting plot, to me, tracks the learned weights in the weighted-sum model during training. The depth and sibling weights are strongest early and shrink over time, while the word-embedding weight grows. My reading: structure helps the model organize itself early, then content takes over.</p>
+
+    <div class="callout"><strong>An open question in my notes.</strong> The tables compare against "Original". I couldn't tell from the paper whether that baseline got the same extra MLM epochs on the same data as the tree versions. For a half-point gap, that matters: some of the gain could come from extra training rather than from tree positions. Their code is linked from the paper, so it's checkable. Until then, I'd describe the result as small, consistent and cheap, not as a measured effect of tree positions alone.</div>
+
+    <!-- ================= 09 ================= -->
+    <div class="section-header">
+      <span class="section-number">09</span>
+      <span class="section-title">Three doors for structure</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>Putting all three papers side by side, I stopped thinking of them as competing methods. They're answers to one question — <em>where</em> does tree information enter the model? — and there are only three doors:</p>
+
+    <div class="table-wrap"><table>
+      <thead><tr><th>Door</th><th>Where the tree enters</th><th>Who uses it</th><th>Retrofit-friendly?</th></tr></thead>
+      <tbody>
+        <tr><td class="metric-name">1 · Input sum</td><td>An extra embedding added to each token's input vector</td><td>TreeGen's depth embedding; Bartkowiak's depth + sibling</td><td>Yes — every Transformer has an input sum</td></tr>
+        <tr><td class="metric-name">2 · Attention bias</td><td>Extra terms added to the attention scores in every layer</td><td>Peng's global β and local γ</td><td>Possible, but surgery in every layer</td></tr>
+        <tr><td class="metric-name">3 · Structural layers</td><td>New layers that mix nodes along tree edges</td><td>TreeGen's tree convolution</td><td>Hard — new architecture needs real training</td></tr>
+      </tbody>
+    </table></div>
+
+    <p>There's a rough law here: the deeper inside the model the door is, the more tree information it can carry — and the harder it is to add to a model that already exists. Peng's door carries full paths and parent–child relations; Bartkowiak's carries two numbers per token, but it opens without touching a single pretrained weight. Answer three questions below to see which door I'd try first in each situation.</p>
+
+    <!-- LAB 3: ROUTE CHOOSER -->
+    <div class="lab" id="routeLab">
+      <div class="lab-head">
+        <div class="lab-title"><span class="dot"></span> Which door? — a decision matrix</div>
+        <div class="lab-sub">my recommendations, not the papers'</div>
+      </div>
+      <div class="q-row"><span class="q">Where are you starting?</span><span class="lab-btns" style="margin:0" data-q="start"><button class="lab-btn on" data-v="pre">Pretrained checkpoint</button><button class="lab-btn" data-v="scratch">Training from scratch</button></span></div>
+      <div class="q-row"><span class="q">What's the task?</span><span class="lab-btns" style="margin:0" data-q="task"><button class="lab-btn on" data-v="und">Understand code (classify, search, clones)</button><button class="lab-btn" data-v="gen">Generate code</button></span></div>
+      <div class="q-row"><span class="q">Can you edit the attention code?</span><span class="lab-btns" style="margin:0" data-q="edit"><button class="lab-btn" data-v="yes">Yes</button><button class="lab-btn on" data-v="no">No, only the inputs</button></span></div>
+      <table class="routes" id="routeTable">
+        <thead><tr><th></th><th data-c="0">1 · Input sum</th><th data-c="1">2 · Attention bias</th><th data-c="2">3 · Structural layers</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Carries</td><td data-c="0">Depth + sibling index per token</td><td data-c="1">Full root-to-node paths; parent–child relations</td><td data-c="2">Explicit mixing with ancestors</td></tr>
+          <tr><td class="k">Touches</td><td data-c="0">Input embedding only</td><td data-c="1">Every attention layer</td><td data-c="2">The architecture itself</td></tr>
+          <tr><td class="k">Extra cost</td><td data-c="0">Two small tables</td><td data-c="1">L × L bias per layer; coordinate lists</td><td data-c="2">New layers; adjacency per example</td></tr>
+          <tr><td class="k">Evidence</td><td data-c="0">Small, consistent gains on CodeBERTa</td><td data-c="1">Beat tree baselines from scratch</td><td data-c="2">Big gains for generation from scratch</td></tr>
+        </tbody>
+      </table>
+      <div class="lab-info active" id="routeInfo"></div>
+    </div>
+
+    <!-- ================= 10 ================= -->
+    <div class="section-header">
+      <span class="section-number">10</span>
+      <span class="section-title">Building it: an implementation mental model</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>Reading papers, I kept nodding along. Then I tried to picture the actual tensors and realized I couldn't. This section is the mental model I built so that I could: what exists at each step, what shape it has, and where it typically goes wrong. The code is a sketch in Python with PyTorch and Hugging Face Transformers — enough to see the moving parts, not a tested library. Where I make a design choice the papers don't specify, I say so.</p>
+
+    <p>The whole thing is a six-step pipeline. Steps 1–4 happen in data preparation, before the model sees anything; steps 5–6 are the model and its training.</p>
+
+    <ol class="pipeline-steps">
+      <li><div><strong>Parse</strong>Turn source text into an AST whose nodes know their text spans.</div></li>
+      <li><div><strong>Position the nodes</strong>Walk the tree once and record each node's depth and sibling index (or Peng's full coordinate list).</div></li>
+      <li><div><strong>Tokenize with offsets</strong>Run the model's own tokenizer and keep each token's span in the source text.</div></li>
+      <li><div><strong>Align and build tensors</strong>Give every token the position of the node that covers it; clamp, pad and batch into integer tensors.</div></li>
+      <li><div><strong>Inject</strong>Add the tree embeddings at the input (door 1), and optionally as an attention bias (door 2).</div></li>
+      <li><div><strong>Train gently</strong>Start as the pretrained model, verify that, then train.</div></li>
+    </ol>
+
+    <h3 class="sub">Steps 1–2: parse and position</h3>
+
+    <p>With Tree-Sitter's Python bindings, parsing and positioning take a dozen lines. Each node keeps its byte span, depth and sibling index:</p>
+
+    <div class="codeblk"><span class="k">import</span> tree_sitter_python <span class="k">as</span> tspython
+<span class="k">from</span> tree_sitter <span class="k">import</span> Language, Parser
+
+parser = <span class="f">Parser</span>(<span class="f">Language</span>(tspython.<span class="f">language</span>()))
+tree = parser.<span class="f">parse</span>(code.<span class="f">encode</span>(<span class="s">"utf8"</span>))
+
+<span class="k">def</span> <span class="f">walk</span>(node, depth=<span class="n">1</span>, sib=<span class="n">1</span>, out=<span class="k">None</span>):
+    out = [] <span class="k">if</span> out <span class="k">is</span> <span class="k">None</span> <span class="k">else</span> out
+    out.<span class="f">append</span>((node.start_byte, node.end_byte, depth, sib, node.type))
+    <span class="k">for</span> i, child <span class="k">in</span> <span class="f">enumerate</span>(node.children, start=<span class="n">1</span>):
+        <span class="f">walk</span>(child, depth + <span class="n">1</span>, i, out)
+    <span class="k">return</span> out
+
+nodes = <span class="f">walk</span>(tree.root_node)   <span class="c"># [(start, end, depth, sibling, type), ...]</span></div>
+
+    <p>Tree-Sitter's tree includes punctuation and keywords as their own small nodes (<code>"def"</code>, <code>"("</code>, <code>":"</code>), which is useful: every character of the program belongs to some leaf.</p>
+
+    <h3 class="sub">Steps 3–4: tokens meet nodes</h3>
+
+    <p>This is the step I got wrong in my head the first time, so here it is as a lab. The tokenization shown is illustrative — the kind of split a byte-level BPE tokenizer like CodeBERTa's makes, with <code>·</code> marking a leading space and <code>⏎</code> a newline. Click any token column to see which node it lands on. Then switch to Peng's coordinates to see the same alignment carrying a full path.</p>
+
+    <!-- LAB 4: TENSOR BUILDER -->
+    <div class="lab" id="tensLab">
+      <div class="lab-head">
+        <div class="lab-title"><span class="dot"></span> Tensor lab — from source text to model inputs</div>
+        <div class="lab-sub">click a token column</div>
+      </div>
+      <pre class="mini" id="tensSrc" style="margin-bottom:0.9rem"></pre>
+      <div class="lab-btns">
+        <span class="lab-label">Position scheme</span>
+        <button class="lab-btn on" id="tensBart">Depth + sibling (Bartkowiak)</button>
+        <button class="lab-btn" id="tensPeng">Coordinate list (Peng)</button>
+      </div>
+      <div class="tree-host" id="tensTree"></div>
+      <div class="tens-wrap"><table class="tens" id="tensTable"></table></div>
+      <div class="lab-info" id="tensInfo"></div>
+      <div class="lab-hint">Node names follow Tree-Sitter's Python grammar; the tree shortens a few (ident = identifier, params = parameters, binary_op = binary_operator).</div>
+    </div>
+
+    <p>The rule I settled on, and the edge cases it handles:</p>
+
+    <div class="table-wrap"><table>
+      <thead><tr><th>Case</th><th>Example</th><th>What to do</th></tr></thead>
+      <tbody>
+        <tr><td class="metric-name">Token inside one leaf</td><td class="mono">·a</td><td>Take that leaf's position. (Ignore the token's leading space when matching.)</td></tr>
+        <tr><td class="metric-name">One identifier, several tokens</td><td class="mono">·normal + ize</td><td>Both pieces land on the same <code>identifier</code> node and get identical positions — the sequential position still tells them apart.</td></tr>
+        <tr><td class="metric-name">Token spans two nodes</td><td class="mono">):</td><td>Take the deepest node that contains the whole token — here <code>function_definition</code>, since <code>)</code> belongs to <code>parameters</code> and <code>:</code> doesn't.</td></tr>
+        <tr><td class="metric-name">Pure whitespace</td><td class="mono">⏎ ···</td><td>Same rule: the deepest node containing it.</td></tr>
+        <tr><td class="metric-name">Special tokens</td><td class="mono">&lt;s&gt; &lt;/s&gt; &lt;pad&gt;</td><td>Reserve index 0 in both tables for "not in the tree".</td></tr>
+      </tbody>
+    </table></div>
+
+    <p>In code, with one trap called out. Hugging Face's offsets count <em>characters</em>; Tree-Sitter's spans count <em>bytes</em>. For plain ASCII code they agree, which is exactly why the bug hides until someone's comment contains an accented letter or an emoji:</p>
+
+    <div class="codeblk">enc = <span class="f">tok</span>(code, return_offsets_mapping=<span class="k">True</span>, truncation=<span class="k">True</span>, max_length=<span class="n">512</span>)
+
+<span class="k">def</span> <span class="f">to_byte</span>(c):                      <span class="c"># character offset -> byte offset</span>
+    <span class="k">return</span> <span class="f">len</span>(code[:c].<span class="f">encode</span>(<span class="s">"utf8"</span>))
+
+depth_ids, sib_ids = [], []
+<span class="k">for</span> s, e <span class="k">in</span> enc[<span class="s">"offset_mapping"</span>]:
+    <span class="k">if</span> s == e:                         <span class="c"># special tokens have empty spans</span>
+        depth_ids.<span class="f">append</span>(<span class="n">0</span>); sib_ids.<span class="f">append</span>(<span class="n">0</span>); <span class="k">continue</span>
+    s, e = <span class="f">to_byte</span>(s), <span class="f">to_byte</span>(e)
+    covering = [n <span class="k">for</span> n <span class="k">in</span> nodes <span class="k">if</span> n[<span class="n">0</span>] &lt;= s <span class="k">and</span> e &lt;= n[<span class="n">1</span>]]
+    start, end, depth, sib, _ = <span class="f">max</span>(covering, key=<span class="k">lambda</span> n: n[<span class="n">2</span>])   <span class="c"># deepest wins</span>
+    depth_ids.<span class="f">append</span>(<span class="f">min</span>(depth, MAX_DEPTH))
+    sib_ids.<span class="f">append</span>(<span class="f">min</span>(sib, MAX_SIB))</div>
+
+    <p>This scans every node for every token, which is fine for a sketch and slow for a dataset. A real version walks tokens and leaves together in one pass. The <code>min(…)</code> calls are the clamping from Part 1: anything deeper or wider than the table goes in the last row.</p>
+
+    <h3 class="sub">Step 5: inject at the input, without touching the model</h3>
+
+    <p>Here's the part that made "seamless" concrete for me. Hugging Face models accept <code>inputs_embeds</code> in place of token ids. If you compute the word embeddings yourself and add the tree term, RoBERTa still adds its own position and type embeddings and its LayerNorm on top. So door 1 needs no change to the model's code at all:</p>
+
+    <div class="codeblk"><span class="k">class</span> <span class="f">TreeEmbeddings</span>(nn.Module):
+    <span class="k">def</span> <span class="f">__init__</span>(<span class="k">self</span>, hidden, max_depth=<span class="n">64</span>, max_sib=<span class="n">64</span>):
+        <span class="f">super</span>().<span class="f">__init__</span>()
+        <span class="k">self</span>.depth = nn.<span class="f">Embedding</span>(max_depth + <span class="n">1</span>, hidden, padding_idx=<span class="n">0</span>)
+        <span class="k">self</span>.sib   = nn.<span class="f">Embedding</span>(max_sib + <span class="n">1</span>, hidden, padding_idx=<span class="n">0</span>)
+        nn.init.<span class="f">zeros_</span>(<span class="k">self</span>.depth.weight)          <span class="c"># do no harm: start as</span>
+        nn.init.<span class="f">zeros_</span>(<span class="k">self</span>.sib.weight)            <span class="c"># the pretrained model</span>
+        <span class="k">self</span>.w = nn.<span class="f">Parameter</span>(torch.<span class="f">ones</span>(<span class="n">2</span>))      <span class="c"># weighted-sum knobs</span>
+
+    <span class="k">def</span> <span class="f">forward</span>(<span class="k">self</span>, depth_ids, sib_ids):
+        <span class="k">return</span> <span class="k">self</span>.w[<span class="n">0</span>] * <span class="k">self</span>.<span class="f">depth</span>(depth_ids) + <span class="k">self</span>.w[<span class="n">1</span>] * <span class="k">self</span>.<span class="f">sib</span>(sib_ids)
+
+model = AutoModelForMaskedLM.<span class="f">from_pretrained</span>(<span class="s">"huggingface/CodeBERTa-small-v1"</span>)
+emb   = model.roberta.embeddings
+tree  = <span class="f">TreeEmbeddings</span>(model.config.hidden_size)
+
+inputs_embeds = emb.<span class="f">word_embeddings</span>(input_ids) + <span class="f">tree</span>(depth_ids, sib_ids)
+position_ids  = <span class="f">create_position_ids_from_input_ids</span>(input_ids, model.config.pad_token_id)
+out = <span class="f">model</span>(inputs_embeds=inputs_embeds, position_ids=position_ids,
+            attention_mask=attention_mask, labels=labels)</div>
+
+    <p>Three details in there each cost me a while to see:</p>
+
+    <p><strong>Zero init still learns.</strong> The tables start at zero, so on step one the model is exactly CodeBERTa. But the gradient reaching each table row is the weight w times the gradient of the loss — and w starts at 1 — so the rows start moving immediately. The weights w themselves get no gradient on step one (their gradient is proportional to the zero tables), and pick up as the tables grow. This is a simplified version of Bartkowiak's weighted sum, which also weights the word and position embeddings.</p>
+
+    <p><strong>Pass position ids yourself.</strong> When given <code>input_ids</code>, RoBERTa computes position ids that skip padding. When given only <code>inputs_embeds</code>, it can't see the padding and numbers every slot sequentially. Computing them from <code>input_ids</code> the way RoBERTa normally does (the helper lives in <code>transformers.models.roberta.modeling_roberta</code>) keeps the pretrained position embeddings meaning what they meant.</p>
+
+    <p><strong>Padding index 0.</strong> <code>padding_idx=0</code> keeps row 0 at zero forever and stops it from learning, so special and padding tokens contribute nothing structural.</p>
+
+    <h3 class="sub">Step 5, door 2: what a Peng-style bias adds</h3>
+
+    <p>If you can edit the attention code, Peng's global bias β from Part 1 is a learned L × L matrix added to each layer's scores before the softmax. As a shape-level sketch (one head, no batching):</p>
+
+    <div class="codeblk"><span class="c"># coord_ids: [L, D] indices into the 136-row coordinate table (0 = padding); D = max depth</span>
+H    = <span class="f">coord_emb</span>(coord_ids)              <span class="c"># [L, D, 32]</span>
+a    = <span class="f">ln</span>(<span class="f">lin</span>(H.<span class="f">flatten</span>(<span class="n">1</span>)))             <span class="c"># [L, d]        Part 1, Eq. 6</span>
+beta = (a @ Wq_a) @ (a @ Wk_a).T          <span class="c"># [L, L]        Part 1, Eq. 8</span>
+scores = (q @ k.T + beta) / math.<span class="f">sqrt</span>(<span class="n">2</span> * d_head)   <span class="c"># Peng also adds the local γ here</span></div>
+
+    <p>The same do-no-harm idea applies, with a catch I only found by working through the gradients. To make β start at zero, initialize <em>one</em> of W<sub>a</sub><sup>Q</sup> or W<sub>a</sub><sup>K</sup> to zero — not both. If both are zero, each one's gradient is multiplied by the other, so both stay stuck at zero forever. And note the scale: a pretrained model's attention expects division by √d<sub>head</sub>, while Peng's formula divides by √(2·d<sub>head</sub>). In a retrofit I'd keep the pretrained scaling, so the old part of the score is unchanged on step one.</p>
+
+    <h3 class="sub">Step 6: train gently, and check before you trust</h3>
+
+    <p>Bartkowiak &amp; Graliński train everything at a learning rate of 1 × 10⁻⁵. A pattern I'd try on top (my suggestion, not theirs): give the new parameters a higher learning rate than the pretrained ones, since they start from nothing while the backbone only needs small adjustments. PyTorch optimizers accept separate parameter groups for exactly this.</p>
+
+    <p>Most retrofit bugs are silent: the model trains, the loss goes down, and the tree signal is wrong or missing. So the last lab is the checklist I'd run before believing any result. Tick them off as you go.</p>
+
+    <!-- LAB 5: CHECKLIST -->
+    <div class="lab" id="checkLab">
+      <div class="lab-head">
+        <div class="lab-title"><span class="dot"></span> Before you trust the numbers</div>
+        <div class="lab-sub" id="checkCount">0 of 9 done</div>
+      </div>
+      <div class="progress"><div id="checkBar"></div></div>
+      <ul class="checks" id="checkList"></ul>
+    </div>
+
+    <!-- ================= EPILOGUE ================= -->
+    <div class="section-header">
+      <span class="section-number">∴</span>
+      <span class="section-title">What the two parts add up to</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>Part 1 asked how a Transformer can see code as a tree. Part 2 asked how to give that sight to a model that already exists. The answer I've ended up with is a map more than a method. Tree information can enter through three doors: the input sum, the attention scores, or new structural layers. TreeGen used the first and third while training from scratch. Peng et al. used the second, also from scratch, and carried the most information. Bartkowiak &amp; Graliński used only the first — two small tables, under 1% more weights — precisely because it's the one door you can open in a pretrained model without touching what it already knows.</p>
+
+    <p>The practical rules came down to a handful of sentences. Align tokens to nodes by span, deepest node wins, and mind bytes versus characters. Start every new component at zero so step one is the pretrained model, but never zero both halves of a product. Check that the structure is actually reaching the model before trusting any result. And read half-point gains carefully.</p>
+
+    <p>Next on my list is the part I keep circling back to: running the A/B snippet from Part 1 through a retrofitted model and checking whether the two programs really end up in different places. If they do, I'll write it up.</p>
+
+    <h3 class="sub">References</h3>
+    <ul class="refs">
+      <li>Zeyu Sun, Qihao Zhu, Yingfei Xiong, Yican Sun, Lili Mou, Lu Zhang. <a href="https://arxiv.org/abs/1911.09983" target="_blank">TreeGen: A Tree-Based Transformer Architecture for Code Generation</a>. AAAI 2020. Code: <a href="https://github.com/zysszy/TreeGen" target="_blank">zysszy/TreeGen</a>.</li>
+      <li>Patryk Bartkowiak, Filip Graliński. <a href="https://aclanthology.org/2025.xllm-1.10/" target="_blank">Seamlessly Integrating Tree-Based Positional Embeddings into Transformer Models for Source Code Representation</a>. XLLM workshop, ACL 2025. <a href="https://arxiv.org/abs/2507.04003" target="_blank">arXiv:2507.04003</a>.</li>
+      <li>Han Peng, Ge Li, Yunfei Zhao, Zhi Jin. <a href="https://aclanthology.org/2022.emnlp-main.210" target="_blank">Rethinking Positional Encoding in Tree Transformer for Code Representation</a>. EMNLP 2022.</li>
+      <li>Yinhan Liu et al. <a href="https://arxiv.org/abs/1907.11692" target="_blank">RoBERTa: A Robustly Optimized BERT Pretraining Approach</a>. 2019.</li>
+      <li><a href="https://huggingface.co/huggingface/CodeBERTa-small-v1" target="_blank">CodeBERTa-small-v1</a> on Hugging Face · <a href="https://tree-sitter.github.io/tree-sitter/" target="_blank">Tree-Sitter</a>.</li>
+    </ul>
+
+    <div class="series-nav" style="margin-top:2rem">
+      <a href="tree-positional-encoding.html">← Part 1 · Teaching a Transformer to see trees</a>
+      <a href="index.html">All writing</a>
+    </div>
+
+  </article>
+</div>
+
+<footer>
+  <div class="footer-inner">
+    <div class="footer-left">Let's <span>connect</span>.</div>
+    <div class="footer-links">
+      <a href="mailto:vanmaliaakash5@gmail.com">Email</a>
+      <a href="https://github.com/aakashvanmali45" target="_blank">GitHub</a>
+      <a href="https://linkedin.com/in/aakashvanmali" target="_blank">LinkedIn</a>
+    </div>
+  </div>
+  <div class="footer-note">© 2026 Aakash Vanmali · Study notes on tree positional encoding, Part 2 — retrofitting and building</div>
+</footer>
+
+<script>
+(function(){
+'use strict';
+const RM = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const SVGNS = 'http://www.w3.org/2000/svg';
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const N = (type, value = null, children = []) => ({ type, value, children });
+const labelOf = n => n.value != null ? `${n.type} ${n.value}` : n.type;
+const fmtF = F => '{' + F.map(c => `(${c[0]},${c[1]})`).join(', ') + '}';
+
+/* ===================== TREE RENDERER (shared with Part 1) ===================== */
+function renderTree(host, root, o = {}){
+  const lvl = o.lvl || 60, nh = 32, padX = 10, padY = 12;
+  const nodes = []; let leaf = 0, maxD = 1, uid = 0;
+  (function rec(n, d, parent, F){
+    n._id = uid++; n._depth = d; n._parent = parent; n._F = F;
+    nodes.push(n); maxD = Math.max(maxD, d);
+    const k = n.children.length;
+    n.children.forEach((c, i) => rec(c, d + 1, n, F.concat([[i + 1, k]])));
+    n._x = k ? (n.children[0]._x + n.children[k - 1]._x) / 2 : leaf++;
+  })(root, 1, null, [[1, 1]]);
+  let slot = o.slot || 80;
+  if (o.fit && host.clientWidth) slot = Math.max(o.minSlot || 60, Math.min(slot, Math.floor((host.clientWidth - 2 * padX - 2) / leaf)));
+  const nw = slot - 8;
+  const contentW = leaf * slot + 2 * padX;
+  const W = Math.max(contentW, o.minW || 0), offX = (W - contentW) / 2;
+  const H = padY * 2 + (maxD - 1) * lvl + nh;
+  const cx = n => offX + padX + n._x * slot + slot / 2;
+  const cy = d => padY + nh / 2 + (d - 1) * lvl;
+  const maxChars = Math.max(4, Math.floor(nw / 6.2));
+  const trunc = s => s.length > maxChars ? s.slice(0, maxChars - 1) + '…' : s;
+  const edge = (x1, y1, x2, y2) => { const m = (y1 + y2) / 2; return `M${x1},${y1} C${x1},${m} ${x2},${m} ${x2},${y2}`; };
+  let edges = '', boxes = '';
+  nodes.forEach(n => {
+    if (n._parent) edges += `<path class="te" data-e="${n._id}" d="${edge(cx(n._parent), cy(n._parent._depth) + nh/2, cx(n), cy(n._depth) - nh/2)}"/>`;
+    const x = cx(n), y = cy(n._depth), hasVal = n.value != null;
+    const cls = ['tn', n.children.length ? '' : 'leaf', n === root ? 'root' : ''].filter(Boolean).join(' ');
+    boxes += `<g class="${cls}" data-id="${n._id}" tabindex="0" role="button" aria-label="${esc(labelOf(n))}"><title>${esc(labelOf(n))}</title>` +
+      `<rect x="${x - nw/2}" y="${y - nh/2}" width="${nw}" height="${nh}" rx="3"/>` +
+      `<text class="ty" x="${x}" y="${hasVal ? y - 2 : y + 4}">${esc(trunc(n.short || n.type))}</text>` +
+      (hasVal ? `<text class="va" x="${x}" y="${y + 10}">${esc(trunc(String(n.value)))}</text>` : '') + `</g>`;
+  });
+  host.innerHTML = `<svg xmlns="${SVGNS}" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${edges}${boxes}</svg>`;
+  const svg = host.querySelector('svg');
+  const gOf = n => svg.querySelector(`g.tn[data-id="${n._id}"]`);
+  const eOf = n => svg.querySelector(`path.te[data-e="${n._id}"]`);
+  const api = {
+    nodes, root, gOf,
+    setVisible(n, v){ gOf(n).classList.toggle('pending', !v); const e = eOf(n); if (e) e.classList.toggle('pending', !v); },
+    clear(){ svg.querySelectorAll('.sel,.hl,.path').forEach(el => el.classList.remove('sel', 'hl', 'path')); },
+    mark(n, cls){ gOf(n).classList.add(cls); },
+    path(n){ let cur = n; while (cur) { const e = eOf(cur); if (e) e.classList.add('path'); if (cur !== n) gOf(cur).classList.add('path'); cur = cur._parent; } },
+    scrollTo(n){ if (host.scrollWidth > host.clientWidth) { const x = cx(n); if (x < host.scrollLeft + 40 || x > host.scrollLeft + host.clientWidth - 40) host.scrollLeft = Math.max(0, x - host.clientWidth / 2); } }
+  };
+  if (o.onSelect) {
+    svg.querySelectorAll('g.tn').forEach(g => {
+      const n = nodes[+g.dataset.id];
+      const fire = () => o.onSelect(n);
+      g.addEventListener('click', fire);
+      g.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); fire(); } });
+    });
+  }
+  return api;
+}
+
+/* ===================== LAB 1: GRAMMAR RULE STEPPER ===================== */
+(function(){
+  const T = N('root', null, [
+    N('Module', null, [
+      N('body', null, [
+        N('Assign', null, [
+          N('targets', null, [ N('Name', null, [ N('id', null, [ N('"length"') ]) ]) ]),
+          N('value', null, [ N('Num', null, [ N('n', null, [ N('"10"') ]) ]) ])
+        ])
+      ])
+    ])
+  ]);
+  const host = document.getElementById('stTree');
+  const tbody = document.querySelector('#stRules tbody');
+  const info = document.getElementById('stInfo');
+  const count = document.getElementById('stCount');
+  const api = renderTree(host, T, { slot: 92, lvl: 46, minW: 220, onSelect: clickNode });
+  const rules = api.nodes.filter(n => n.children.length).map((n, i) => ({ n, i: i + 1, text: `${n.type} → ${n.children.map(c => c.type).join(' ')}`, d: n._depth }));
+  rules.forEach(r => { r.n._rule = r; });
+  const maxD = Math.max(...rules.map(r => r.d));
+  tbody.innerHTML = rules.map(r => `<tr data-i="${r.i}"><td>${r.i}</td><td>${esc(r.text)}</td><td><span class="dbar" style="width:${Math.round(r.d / maxD * 46)}px"></span>${r.d}</td></tr>`).join('');
+  const rows = [...tbody.querySelectorAll('tr')];
+  rows.forEach((tr, idx) => tr.addEventListener('click', () => { if (step >= rules.length) windowFor(rules[idx]); }));
+  let step = 0, timer = null;
+
+  function paint(){
+    api.clear();
+    const visible = new Set([T]);
+    for (let k = 0; k < step; k++) rules[k].n.children.forEach(c => visible.add(c));
+    api.nodes.forEach(n => api.setVisible(n, visible.has(n)));
+    rows.forEach((tr, k) => { tr.className = k < step ? 'done' : ''; if (step >= rules.length) tr.classList.add('clickable'); });
+    count.textContent = `${step} / ${rules.length} rules`;
+    info.classList.add('active');
+    if (step < rules.length) {
+      const r = rules[step];
+      rows[step].className = 'now';
+      api.mark(r.n, 'sel'); api.path(r.n);
+      const pathTxt = []; let cur = r.n; while (cur) { pathTxt.unshift(cur.type); cur = cur._parent; }
+      info.innerHTML = step === 0
+        ? `Generation starts with a single <strong>root</strong> node. The leftmost unexpanded non-terminal is always the next to expand — right now that's <strong>root</strong>. Press <em>Next rule</em>.`
+        : `Next to expand: <strong>${esc(r.n.type)}</strong> (depth ${r.d}). The decoder's query is its path from the root: <code>${pathTxt.map(esc).join(' → ')}</code>. The model must pick rule ${r.i}: <code>${esc(r.text)}</code>.` +
+          (r.n.children[0] && r.n.children[0].type.startsWith('"') ? ` That child is a terminal — TreeGen can copy it straight from the English description with a pointer.` : '');
+    } else {
+      info.innerHTML = `Done: every leaf is a terminal, so the program is complete. <strong>Now click any non-terminal node or rule row</strong> to compare what tree convolution mixes (gold) with what a sequence window would mix (blue). Try <code>value</code>.`;
+    }
+  }
+  function windowFor(r){
+    paint();
+    const self = r.n, par = self._parent, gpar = par && par._parent;
+    api.mark(self, 'sel'); if (par) api.mark(par, 'hl'); if (gpar) api.mark(gpar, 'hl');
+    rows.forEach(tr => tr.classList.remove('win-tree', 'win-seq', 'win-self'));
+    rows[r.i - 1].classList.add('win-self');
+    [par, gpar].forEach(a => { if (a && a._rule) rows[a._rule.i - 1].classList.add('win-tree'); });
+    [r.i - 2, r.i].forEach(k => { if (k >= 0 && k < rows.length && !rows[k].classList.contains('win-tree')) rows[k].classList.add('win-seq'); });
+    const seqN = [r.i - 1, r.i + 1].filter(k => k >= 1 && k <= rules.length).map(k => `rule ${k} (<code>${esc(rules[k - 1].text)}</code>)`);
+    const treeN = [par, gpar].filter(a => a && a._rule).map(a => `rule ${a._rule.i} (<code>${esc(a._rule.text)}</code>)`);
+    info.innerHTML = `<strong>Rule ${r.i}: ${esc(r.text)}</strong><br>Tree window mixes it with ${treeN.length ? treeN.join(' and ') : 'only itself — the root borrows its own features as its parent'}.<br>A sequence window would mix it with ${seqN.join(' and ')}.`;
+  }
+  function clickNode(n){
+    if (step < rules.length) return;
+    const r = n._rule || (n._parent && n._parent._rule);
+    if (r) windowFor(r);
+  }
+  const go = s => { step = Math.max(0, Math.min(rules.length, s)); paint(); };
+  document.getElementById('stNext').addEventListener('click', () => { stop(); go(step + 1); });
+  document.getElementById('stBack').addEventListener('click', () => { stop(); go(step - 1); });
+  document.getElementById('stReset').addEventListener('click', () => { stop(); go(0); });
+  const playBtn = document.getElementById('stPlay');
+  function stop(){ clearInterval(timer); timer = null; playBtn.textContent = 'Play'; }
+  playBtn.addEventListener('click', () => {
+    if (timer) { stop(); return; }
+    if (step >= rules.length) go(0);
+    if (RM) { go(rules.length); return; }
+    playBtn.textContent = 'Pause';
+    timer = setInterval(() => { if (step >= rules.length) { stop(); return; } go(step + 1); }, 900);
+  });
+  go(0);
+})();
+
+/* ===================== LAB 2: EMBEDDING MIXER ===================== */
+(function(){
+  const D = 8;
+  let seed = 7;
+  function rng(){ seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
+  const gauss = () => { const u = Math.max(rng(), 1e-9), v = rng(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+  const vec = (s = 1) => Array.from({ length: D }, () => gauss() * s);
+  const add = (...vs) => vs[0].map((_, i) => vs.reduce((a, v) => a + v[i], 0));
+  const scale = (v, s) => v.map(x => x * s);
+  const norm = v => Math.sqrt(v.reduce((a, x) => a + x * x, 0));
+  const LN = v => { const m = v.reduce((a, x) => a + x, 0) / v.length; const c = v.map(x => x - m); const sd = Math.sqrt(c.reduce((a, x) => a + x * x, 0) / v.length) || 1; return c.map(x => x / sd); };
+  const cos = (a, b) => { const na = norm(a), nb = norm(b); return na && nb ? a.reduce((s, x, i) => s + x * b[i], 0) / (na * nb) : 0; };
+
+  let w, p, ed, es, P;
+  function reroll(){
+    w = vec(1); p = vec(0.5); ed = vec(1); es = vec(1);
+    P = Array.from({ length: D }, () => Array.from({ length: 3 * D }, () => gauss() / Math.sqrt(3 * D)));
+  }
+  reroll();
+  const st = { s: 'sum', sigma: 1.0, wt: 0.5, proj: 'id' };
+  const els = {
+    old: document.getElementById('vecOld'), nw: document.getElementById('vecNew'),
+    cos: document.getElementById('mixCos'), share: document.getElementById('mixShare'), verdict: document.getElementById('mixVerdict'),
+    sigma: document.getElementById('mixSigma'), sigmaV: document.getElementById('mixSigmaV'),
+    w: document.getElementById('mixW'), wV: document.getElementById('mixWV'),
+    wCtrl: document.getElementById('mixWCtrl'), pCtrl: document.getElementById('mixPCtrl')
+  };
+  [els.old, els.nw].forEach(h => { for (let i = 0; i < D; i++) { const c = document.createElement('div'); c.className = 'vcell'; c.innerHTML = '<div class="vbar"></div>'; h.appendChild(c); } });
+  function bars(host, v){
+    host.querySelectorAll('.vbar').forEach((b, i) => {
+      const h = Math.min(50, Math.abs(v[i]) / 2.6 * 50);
+      b.className = 'vbar ' + (v[i] >= 0 ? 'pos' : 'neg');
+      b.style.height = h + '%';
+    });
+  }
+  function compute(){
+    const base = add(w, p);
+    const x0 = LN(base);
+    const tree = scale(add(ed, es), st.sigma);
+    let pre, treePart;
+    if (st.s === 'sum') { pre = add(base, tree); treePart = tree; }
+    else if (st.s === 'wsum') { treePart = scale(tree, st.wt); pre = add(base, treePart); }
+    else {
+      const z = base.concat(scale(ed, st.sigma), scale(es, st.sigma));
+      if (st.proj === 'id') { pre = base.map((x, i) => x + 0 * z[i]); treePart = new Array(D).fill(0); }
+      else { pre = P.map(row => row.reduce((a, r, j) => a + r * z[j], 0)); treePart = null; }
+    }
+    const x = LN(pre);
+    bars(els.old, x0); bars(els.nw, x);
+    const c = cos(x0, x);
+    els.cos.innerHTML = `${c.toFixed(2)}<small>cosine similarity</small>`;
+    if (treePart) { const sh = norm(treePart) / (norm(base) + norm(treePart)); els.share.innerHTML = `${Math.round(sh * 100)}%<small>tree share of the input</small>`; }
+    else els.share.innerHTML = `n/a<small>tree share (mixed by projection)</small>`;
+    let msg, cls;
+    if (c > 0.98) { msg = 'The pretrained layers can barely tell anything changed. Safe start: the model begins as CodeBERTa and training grows the tree signal from here.'; cls = 'ok'; }
+    else if (c > 0.85) { msg = 'A noticeable shift. The upper layers see familiar-ish inputs; expect a dip at the start of training while they adapt.'; cls = ''; }
+    else { msg = 'The upper layers are now reading inputs unlike anything they were trained on. Much of what pretraining learned has to be re-earned.'; cls = 'bad'; }
+    if (st.s === 'cat' && st.proj === 'rand') msg = 'A random projection scrambles even the old word + position part. ' + msg;
+    if (st.s === 'cat' && st.proj === 'id') msg = 'A pass-through projection copies word + position and ignores the tree parts on step one, whatever their scale. ' + msg;
+    els.verdict.className = 'verdict ' + cls; els.verdict.textContent = msg;
+  }
+  function sync(){
+    els.wCtrl.hidden = st.s !== 'wsum'; els.pCtrl.hidden = st.s !== 'cat';
+    els.sigmaV.textContent = st.sigma === 0 ? 'all zeros' : `random, scale ${st.sigma.toFixed(1)}`;
+    els.wV.textContent = st.wt.toFixed(2);
+    compute();
+  }
+  document.querySelectorAll('#mixStrat button').forEach(b => b.addEventListener('click', () => { document.querySelectorAll('#mixStrat button').forEach(x => x.classList.toggle('on', x === b)); st.s = b.dataset.s; sync(); }));
+  document.querySelectorAll('#mixProj button').forEach(b => b.addEventListener('click', () => { document.querySelectorAll('#mixProj button').forEach(x => x.classList.toggle('on', x === b)); st.proj = b.dataset.p; sync(); }));
+  els.sigma.addEventListener('input', () => { st.sigma = +els.sigma.value / 10; sync(); });
+  els.w.addEventListener('input', () => { st.wt = +els.w.value / 100; sync(); });
+  document.getElementById('mixReroll').addEventListener('click', () => { seed = Math.floor(Math.random() * 1e6); reroll(); sync(); });
+  sync();
+})();
+
+/* ===================== LAB 3: ROUTE CHOOSER ===================== */
+(function(){
+  const st = { start: 'pre', task: 'und', edit: 'no' };
+  const table = document.getElementById('routeTable'), info = document.getElementById('routeInfo');
+  function decide(){
+    if (st.start === 'pre' && st.edit === 'no') return [0, null, 'You have a pretrained checkpoint and can only change its inputs, so door 1 is the only one open — and it\'s the one Bartkowiak &amp; Graliński show working. Zero-init the tables, pass position ids yourself, and continue MLM pretraining before fine-tuning.'];
+    if (st.start === 'pre') return [0, 1, 'Start with door 1: it\'s cheap and can\'t hurt on step one. Once that works, add a Peng-style global bias (door 2) with one projection zero-initialized, keeping the pretrained √d scaling. Compare against the door-1 model with the same extra training, so the comparison is fair.'];
+    if (st.task === 'gen') return [2, 0, 'Training a generator from scratch is TreeGen\'s home ground: structural layers plus a depth embedding at the input, generating grammar rules rather than tokens. Peng\'s attention bias is worth trying as a further upgrade.'];
+    return [1, 0, 'From scratch, for understanding tasks, Peng et al.\'s global + local attention bias carried the most tree information and beat earlier tree Transformers. Adding an input-level depth/sibling embedding as well is cheap.'];
+  }
+  function paint(){
+    const [pri, sec, text] = decide();
+    table.querySelectorAll('[data-c]').forEach(c => { const k = +c.dataset.c; c.classList.toggle('pri', k === pri); c.classList.toggle('sec', k === sec); });
+    const names = ['1 · Input sum', '2 · Attention bias', '3 · Structural layers'];
+    info.innerHTML = `<strong>Try first: ${names[pri]}</strong>${sec != null ? ` · then: ${names[sec]}` : ''}<br>${text}`;
+  }
+  document.querySelectorAll('#routeLab [data-q]').forEach(g => {
+    g.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+      g.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+      st[g.dataset.q] = b.dataset.v; paint();
+    }));
+  });
+  paint();
+})();
+
+/* ===================== LAB 4: TENSOR BUILDER ===================== */
+(function(){
+  const src = 'def normalize(a, b):\n    return a + b';
+  const A = t => N(`"${t}"`, null, []);            // anonymous leaf (keyword / punctuation)
+  const I = t => N('identifier', t, []);            // named leaf
+  const T = N('module', null, [
+    N('function_definition', null, [
+      A('def'), I('normalize'),
+      N('parameters', null, [ A('('), I('a'), A(','), I('b'), A(')') ]),
+      A(':'),
+      N('block', null, [
+        N('return_statement', null, [ A('return'), N('binary_operator', null, [ I('a'), A('+'), I('b') ]) ])
+      ])
+    ])
+  ]);
+  const SHORT = { identifier: 'ident', function_definition: 'function_def', parameters: 'params', return_statement: 'return_stmt', binary_operator: 'binary_op' };
+  (function sh(n){ if (SHORT[n.type]) n.short = SHORT[n.type]; n.children.forEach(sh); })(T);
+  // assign spans: leaves in order, scanning the source
+  let cur = 0;
+  (function spans(n){
+    if (!n.children.length) {
+      const text = n.value != null ? n.value : n.type.slice(1, -1);
+      const at = src.indexOf(text, cur);
+      n.start = at; n.end = at + text.length; cur = n.end; n.text = text; return;
+    }
+    n.children.forEach(spans);
+    n.start = n.children[0].start; n.end = n.children[n.children.length - 1].end;
+  })(T);
+  // illustrative BPE tokens, in order; ' ' prefix = leading space
+  const pieces = ['def', ' normal', 'ize', '(', 'a', ',', ' b', '):', '\n', '   ', ' return', ' a', ' +', ' b'];
+  let pos = 0;
+  const toks = [{ t: '<s>', special: true }];
+  pieces.forEach(pc => {
+    if (src.slice(pos, pos + pc.length) !== pc) console.warn('token mismatch', pc, pos);
+    toks.push({ t: pc, s: pos, e: pos + pc.length }); pos += pc.length;
+  });
+  toks.push({ t: '</s>', special: true });
+
+  const host = document.getElementById('tensTree');
+  const table = document.getElementById('tensTable');
+  const info = document.getElementById('tensInfo');
+  document.getElementById('tensSrc').textContent = src;
+  let mode = 'bart', selected = 3;
+  const api = renderTree(host, T, { fit: true, slot: 74, minSlot: 58, lvl: 52, onSelect: n => {
+    const k = toks.findIndex(tk => tk.node === n); if (k >= 0) { selected = k; paint(); }
+  }});
+  const sibOf = n => n._parent ? n._parent.children.indexOf(n) + 1 : 1;
+  toks.forEach(tk => {
+    if (tk.special) return;
+    let s = tk.s, e = tk.e;
+    const trimmed = tk.t.trim();
+    if (trimmed) { s = s + tk.t.indexOf(trimmed); e = s + trimmed.length; }
+    let best = null;
+    api.nodes.forEach(n => { if (n.start <= s && e <= n.end && (!best || n._depth > best._depth)) best = n; });
+    tk.node = best;
+  });
+  const show = t => t.replace(/\n/g, '⏎').replace(/ /g, '·');
+  const nodeName = n => n.value != null ? `${n.type}` : n.type;
+
+  function paint(){
+    const cell = (k, html, extra = '') => `<td data-k="${k}" class="${[toks[k].special ? 'special' : '', k === selected ? 'on' : '', extra].filter(Boolean).join(' ')}">${html}</td>`;
+    const selNode = toks[selected].node;
+    const share = k => !toks[k].special && k !== selected && selNode && toks[k].node === selNode ? 'share' : '';
+    let rows = `<tr class="tokrow"><th>token</th>${toks.map((tk, k) => cell(k, esc(tk.special ? tk.t : show(tk.t)), share(k))).join('')}</tr>`;
+    rows += `<tr><th>AST node</th>${toks.map((tk, k) => cell(k, tk.special ? '—' : esc(nodeName(tk.node)))).join('')}</tr>`;
+    if (mode === 'bart') {
+      rows += `<tr class="idrow"><th>depth_ids</th>${toks.map((tk, k) => cell(k, tk.special ? 0 : tk.node._depth)).join('')}</tr>`;
+      rows += `<tr class="idrow"><th>sibling_ids</th>${toks.map((tk, k) => cell(k, tk.special ? 0 : sibOf(tk.node))).join('')}</tr>`;
+    } else {
+      rows += `<tr class="idrow"><th>F(x) length</th>${toks.map((tk, k) => cell(k, tk.special ? 0 : tk.node._F.length)).join('')}</tr>`;
+      rows += `<tr class="idrow"><th>last coord</th>${toks.map((tk, k) => { if (tk.special) return cell(k, '—'); const c = tk.node._F[tk.node._F.length - 1]; return cell(k, `(${c[0]},${c[1]})`); }).join('')}</tr>`;
+    }
+    table.innerHTML = rows;
+    table.querySelectorAll('td[data-k]').forEach(td => td.addEventListener('click', () => { selected = +td.dataset.k; paint(); }));
+    api.clear();
+    const tk = toks[selected];
+    info.classList.add('active');
+    if (tk.special) { info.innerHTML = `<strong>${esc(tk.t)}</strong> is a special token added by the tokenizer. It isn't part of the program, so it gets the reserved index <code>0</code> in every position table.`; return; }
+    const n = tk.node;
+    api.mark(n, 'sel'); api.path(n); api.scrollTo(n);
+    const sharing = toks.filter((o, k) => k !== selected && !o.special && o.node === n).map(o => `<code>${esc(show(o.t))}</code>`);
+    let why;
+    const leafText = n.children.length ? null : n.text;
+    if (!tk.t.trim()) why = 'This token is pure whitespace, so it lands on the deepest node whose span contains it.';
+    else if (n.children.length) why = `The token's text crosses a node boundary, so it lands on the deepest node containing all of it: <strong>${esc(n.type)}</strong>.`;
+    else if (leafText !== tk.t.trim()) why = `The token is only part of the leaf <code>${esc(leafText)}</code>; every piece of that leaf gets the same position.`;
+    else why = 'The token matches one leaf exactly.';
+    const pos = mode === 'bart'
+      ? `depth <strong>${n._depth}</strong>, sibling <strong>${sibOf(n)}</strong>`
+      : `F(x) = <code>${fmtF(n._F)}</code> — ${n._F.length} coordinates, padded with zeros up to the max depth`;
+    info.innerHTML = `<strong>${esc(show(tk.t))}</strong> → node <strong>${esc(labelOf(n))}</strong> · ${pos}.<br>${why}${sharing.length ? ` Shares its node with ${sharing.join(', ')} (underlined).` : ''}`;
+  }
+  const bB = document.getElementById('tensBart'), bP = document.getElementById('tensPeng');
+  bB.addEventListener('click', () => { mode = 'bart'; bB.classList.add('on'); bP.classList.remove('on'); paint(); });
+  bP.addEventListener('click', () => { mode = 'peng'; bP.classList.add('on'); bB.classList.remove('on'); paint(); });
+  paint();
+})();
+
+/* ===================== LAB 5: CHECKLIST ===================== */
+(function(){
+  const items = [
+    ['Zero-init equivalence.', 'With the new tables at zero, the retrofitted model\'s logits match the original model\'s on a batch, up to floating-point noise.'],
+    ['Alignment spot check.', 'Print 20 random tokens next to the text of the node each was aligned to. Every one should make sense.'],
+    ['Subword sharing.', 'All pieces of a split identifier carry identical depth and sibling ids.'],
+    ['Bytes vs characters.', 'Run alignment on a snippet with a non-ASCII comment or string (an umlaut, an emoji) and confirm the positions don\'t shift.'],
+    ['Special and padding tokens.', 'They get index 0, and that embedding row stays at zero after training.'],
+    ['Clamping counts.', 'Measure the largest depth and sibling index in your data, and how many tokens get clamped. If it\'s more than a sliver, grow the tables.'],
+    ['The A/B snippet.', 'Part 1\'s two snippets — z inside vs after the if — must produce different depth ids for z = 2.'],
+    ['Fair baseline.', 'The baseline gets the same extra training, data and seeds as the tree model, with the tree tables switched off.'],
+    ['Parameter count.', 'Count the new parameters and check them against what you designed (two tables of rows × hidden size, plus any weights).']
+  ];
+  const list = document.getElementById('checkList'), bar = document.getElementById('checkBar'), count = document.getElementById('checkCount');
+  list.innerHTML = items.map(([b, t], i) => `<li><input type="checkbox" id="ck${i}"><label for="ck${i}"><b>${esc(b)}</b> ${esc(t)}</label></li>`).join('');
+  const boxes = [...list.querySelectorAll('input')];
+  function upd(){
+    const n = boxes.filter(b => b.checked).length;
+    boxes.forEach(b => b.closest('li').classList.toggle('done', b.checked));
+    bar.style.width = (n / boxes.length * 100) + '%';
+    count.textContent = n === boxes.length ? 'all 9 done — trust, cautiously' : `${n} of ${boxes.length} done`;
+  }
+  boxes.forEach(b => b.addEventListener('change', upd));
+  upd();
+})();
+})();
+</script>
+</body>
+</html>
