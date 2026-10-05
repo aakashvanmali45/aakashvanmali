@@ -1,0 +1,1255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sculpting Code out of Noise — Study Notes on Diffusion Code Models · Aakash Vanmali</title>
+<meta name="description" content="Study notes on diffusion code models from the ground up: forward and reverse noise, masked diffusion decoding, CodeFusion (2023), DiffuCoder (2025), TreeDiff (2025) and LintSeq (2025). Seven interactive labs.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root{
+    --ink:#0B1222; --ink-light:#111B2E; --ink-surface:#162038;
+    --gold:#C9A84C; --gold-dim:rgba(201,168,76,0.15); --gold-glow:rgba(201,168,76,0.08);
+    --paper:#F6F2E8; --paper-white:#FDFBF5;
+    --text-dark:#1A1A1A; --text-mid:#4A4A4A; --text-light:#777;
+    --text-on-ink:#C8C8D4; --text-bright:#E8E8F0;
+    --border-paper:#E0D8C8; --border-ink:rgba(255,255,255,0.08);
+    --serif:'Cormorant Garamond', Georgia, serif;
+    --sans:'Space Grotesk', -apple-system, sans-serif;
+    --mono:'JetBrains Mono', monospace;
+    --max-w:780px;
+    --ease: cubic-bezier(0.25,0.46,0.45,0.94);
+    --teal:#5BA68A;
+    --steel:#6B8DAD;
+    --amber:#D4956B;
+    --lavender:#8B7DB8;
+  }
+  html{ font-size:17px; scroll-behavior:smooth; }
+  body{ font-family:var(--sans); color:var(--text-dark); background:var(--paper); line-height:1.7; -webkit-font-smoothing:antialiased; }
+  ::selection{ background:var(--gold); color:var(--ink); }
+  a{ color:var(--gold); text-decoration:none; transition:color .2s; }
+  a:hover{ text-decoration:underline; }
+
+  /* ===== TOPBAR ===== */
+  .topbar{ background:var(--ink); padding:1.1rem 0; }
+  .topbar-inner{ max-width:var(--max-w); margin:0 auto; padding:0 2rem; display:flex; justify-content:space-between; align-items:center; }
+  .topbar-name{ font-family:var(--serif); font-weight:600; font-size:1.15rem; color:var(--text-on-ink); }
+  .topbar-name span{ color:var(--gold); }
+  .topbar-links{ display:flex; gap:1.4rem; }
+  .topbar-links a{ font-family:var(--mono); font-size:0.72rem; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-on-ink); opacity:0.75; }
+  .topbar-links a:hover{ color:var(--gold); opacity:1; text-decoration:none; }
+
+  /* ===== HERO ===== */
+  .hero{ background:var(--ink); padding: 4.5rem 0 4rem; position:relative; overflow:hidden; }
+  .hero::after{
+    content:''; position:absolute; top:-20%; right:-10%; width:480px; height:480px; border-radius:50%;
+    background:radial-gradient(circle, rgba(201,168,76,0.10), transparent 70%);
+  }
+  .hero-inner{ max-width:var(--max-w); margin:0 auto; padding:0 2rem; position:relative; z-index:1; }
+  .hero-eyebrow{ font-family:var(--mono); font-size:0.7rem; letter-spacing:0.2em; text-transform:uppercase; color:var(--gold); margin-bottom:1.2rem; }
+  .hero h1{ font-family:var(--serif); font-weight:600; font-size:3rem; color:var(--text-bright); line-height:1.1; letter-spacing:-0.01em; margin-bottom:1rem; max-width:640px; }
+  .hero-dek{ font-family:var(--serif); font-style:italic; font-size:1.25rem; color:rgba(201,168,76,0.85); max-width:560px; line-height:1.5; }
+  .hero-meta{ font-family:var(--mono); font-size:0.68rem; letter-spacing:0.08em; text-transform:uppercase; color:rgba(200,200,212,0.4); margin-top:2rem; }
+  .hero-tree{ position:absolute; right:2rem; bottom:1.4rem; width:210px; opacity:0.75; z-index:0; }
+  .hero-tree line{ stroke:rgba(201,168,76,0.35); stroke-width:1; }
+  .hero-tree circle{ fill:var(--ink); stroke:rgba(201,168,76,0.6); stroke-width:1; }
+  .hero-tree circle.v{ stroke-dasharray:3 2; stroke:rgba(200,200,212,0.35); }
+  .hero-tree text{ font-family:var(--mono); font-size:7px; fill:rgba(201,168,76,0.75); text-anchor:middle; }
+
+  /* ===== CONTENT ===== */
+  .content{ max-width:var(--max-w); margin:0 auto; padding:0 2rem; }
+  article{ padding:3.5rem 0 1rem; }
+  .section-header{ display:flex; align-items:center; gap:1rem; margin: 3.4rem 0 1.6rem; }
+  .section-header:first-of-type{ margin-top:0; }
+  .section-number{ font-family:var(--serif); font-size:2rem; font-weight:300; color:var(--gold); line-height:1; opacity:0.6; }
+  .section-title{ font-family:var(--serif); font-size:1.5rem; font-weight:600; color:var(--text-dark); letter-spacing:-0.01em; }
+  .section-rule{ flex:1; height:1px; background:var(--border-paper); }
+  h3.sub{ font-family:var(--serif); font-size:1.25rem; font-weight:600; color:var(--text-dark); margin:2.3rem 0 0.7rem; letter-spacing:-0.005em; }
+
+  p{ margin:0 0 1.15rem; font-size:0.98rem; color:var(--text-mid); }
+  p.lead{ font-family:var(--serif); font-size:1.35rem; font-style:italic; color:var(--text-dark); line-height:1.6; }
+  strong{ color:var(--text-dark); font-weight:600; }
+  em{ color:var(--text-dark); }
+  code{ font-family:var(--mono); background:var(--paper-white); border:1px solid var(--border-paper); padding:1px 6px; font-size:0.85em; color:var(--gold); border-radius:2px; }
+  sub, sup{ font-size:0.7em; line-height:0; }
+
+  .formula-block{
+    font-family:var(--mono); background:var(--paper-white); border:1px solid var(--border-paper); border-left:3px solid var(--gold);
+    padding:1rem 1.3rem; margin:1.3rem 0; font-size:0.92rem; color:var(--text-dark); overflow-x:auto; line-height:1.9;
+  }
+  .formula-block .name{ font-family:var(--sans); font-weight:600; color:var(--gold); font-size:0.78rem; letter-spacing:0.04em; text-transform:uppercase; display:block; margin-bottom:0.3rem;}
+  .formula-block .sub{ font-family:var(--sans); color:var(--text-light); font-size:0.8rem; margin-top:0.5rem; line-height:1.55; display:block; }
+  .formula-block .case{ color:var(--text-light); font-size:0.82rem; }
+
+  blockquote{ margin:1.8rem 0; padding:0.2rem 0 0.2rem 1.3rem; border-left:2px solid var(--gold); font-family:var(--serif); font-style:italic; color:var(--text-mid); font-size:1.15rem; }
+
+  .callout{ background:var(--paper-white); border:1px solid var(--border-paper); border-left:3px solid var(--steel); padding:1rem 1.3rem; margin:1.5rem 0; font-size:0.92rem; color:var(--text-mid); }
+  .callout strong{ color:var(--steel); }
+  .callout.gold{ border-left-color:var(--gold); }
+  .callout.gold strong{ color:var(--gold); }
+  .callout.teal{ border-left-color:var(--teal); }
+  .callout.teal strong{ color:var(--teal); }
+  .callout p:last-child{ margin-bottom:0; }
+
+  .question{ margin:2.2rem 0 1rem; padding:1.1rem 1.3rem; background:var(--paper-white); border:1px solid var(--border-paper); border-left:3px solid var(--gold); }
+  .question .q-label{ font-family:var(--mono); font-size:0.64rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--gold); margin-bottom:0.3rem; }
+  .question .q-text{ font-family:var(--serif); font-size:1.3rem; font-weight:600; color:var(--text-dark); line-height:1.35; }
+
+  ol.route{ list-style:none; margin:1.4rem 0 1.6rem; border-top:1px solid var(--border-paper); }
+  ol.route li{ display:grid; grid-template-columns:2.6rem 1fr; padding:0.55rem 0; border-bottom:1px solid var(--border-paper); font-size:0.92rem; color:var(--text-mid); }
+  ol.route li span{ font-family:var(--serif); font-size:1.15rem; color:var(--gold); opacity:0.7; line-height:1.4; }
+
+  /* ===== TABLE ===== */
+  .table-wrap{ overflow-x:auto; margin:1.4rem 0; }
+  table{ width:100%; border-collapse:collapse; font-size:0.9rem; }
+  th,td{ text-align:left; padding:0.65rem 0.6rem; border-bottom:1px solid var(--border-paper); vertical-align:top; }
+  th{ font-family:var(--mono); font-size:0.62rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-light); font-weight:500;}
+  td{ color:var(--text-mid); }
+  td.metric-name{ color:var(--text-dark); font-weight:600; font-family:var(--sans); }
+  td.mono{ font-family:var(--mono); font-size:0.82rem; color:var(--text-dark); }
+  tr:last-child td{ border-bottom:none; }
+
+  /* ===== CODE BLOCK ===== */
+  .codeblk{
+    font-family:var(--mono); background:var(--paper-white); border:1px solid var(--border-paper); border-left:3px solid var(--steel);
+    padding:1rem 1.3rem; margin:1.3rem 0; font-size:0.82rem; color:var(--text-dark); overflow-x:auto; line-height:1.75; white-space:pre;
+  }
+  .codeblk .c{ color:var(--text-light); font-style:italic; }
+  .codeblk .k{ color:var(--steel); }
+  .codeblk .s{ color:var(--teal); }
+  .codeblk .n{ color:var(--amber); }
+  .codeblk .d{ color:var(--gold); }
+
+  /* ===== FIGURE (paper) ===== */
+  .fig{ background:var(--paper-white); border:1px solid var(--border-paper); padding:1.2rem 1.4rem; margin:1.5rem 0; }
+  .bag-row{ display:flex; align-items:center; gap:0.45rem; flex-wrap:wrap; margin:0.45rem 0; }
+  .bag-row .w{ font-family:var(--mono); font-size:0.78rem; padding:0.18rem 0.55rem; border:1px solid var(--border-paper); background:var(--paper); color:var(--text-dark); }
+  .bag-row .arrow{ color:var(--text-light); margin:0 0.3rem; font-family:var(--mono); font-size:0.8rem; }
+  .bag-row .bag{ font-family:var(--mono); font-size:0.78rem; color:var(--gold); border:1px dashed var(--gold); padding:0.18rem 0.75rem; border-radius:999px; background:var(--gold-glow); }
+  .fig-cap{ font-size:0.8rem; color:var(--text-light); margin-top:0.7rem; line-height:1.55; }
+
+  /* ===== INTERACTIVE LABS (ink panels, shared) ===== */
+  .lab{ background:var(--ink); padding:1.6rem 1.5rem 1.8rem; margin:2rem 0 1rem; position:relative; overflow:hidden; }
+  .lab::before{ content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--gold); }
+  .lab-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:1.1rem; flex-wrap:wrap; gap:0.6rem; }
+  .lab-title{ font-family:var(--mono); font-size:0.72rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--gold); display:flex; align-items:center; gap:0.5rem; }
+  .lab-title .dot{ width:6px; height:6px; border-radius:50%; background:var(--gold); animation:blink 2s infinite; }
+  .lab-sub{ font-family:var(--mono); font-size:0.64rem; color:rgba(200,200,212,0.45); }
+  @keyframes blink{ 50%{ opacity:0.3; } }
+
+  .lab-btns{ display:flex; flex-wrap:wrap; gap:0.45rem; margin-bottom:0.9rem; align-items:center; }
+  .lab-btn{
+    font-family:var(--mono); font-size:0.68rem; letter-spacing:0.03em; padding:0.45rem 0.85rem;
+    border:1px solid rgba(201,168,76,0.3); border-radius:2px; background:rgba(255,255,255,0.02); color:var(--text-on-ink);
+    cursor:pointer; transition:all 0.2s;
+  }
+  .lab-btn:hover{ border-color:var(--gold); color:var(--gold); background:var(--gold-dim); }
+  .lab-btn.on{ background:var(--gold); color:var(--ink); border-color:var(--gold); }
+  .lab-btn.ghost{ border-color:rgba(255,255,255,0.12); }
+  .lab-btn:focus-visible, .tn:focus-visible, .tri .c:focus-visible{ outline:2px solid var(--gold); outline-offset:2px; }
+  .lab-label{ font-family:var(--mono); font-size:0.6rem; text-transform:uppercase; letter-spacing:0.08em; color:rgba(200,200,212,0.5); margin:0.2rem 0.4rem 0 0; }
+
+  .lab textarea{
+    width:100%; min-height:132px; font-family:var(--mono); font-size:0.82rem; line-height:1.6; tab-size:4;
+    background:rgba(255,255,255,0.04); border:1px solid var(--border-ink); color:var(--text-bright);
+    padding:0.8rem 1rem; resize:vertical; border-radius:0;
+  }
+  .lab textarea:focus{ outline:none; border-color:rgba(201,168,76,0.5); }
+  .lab-status{ font-family:var(--mono); font-size:0.64rem; color:rgba(200,200,212,0.5); margin:0.55rem 0 0.9rem; min-height:1rem; }
+  .lab-status.err{ color:var(--amber); }
+
+  .tree-host{ background:rgba(255,255,255,0.03); border:1px solid var(--border-ink); overflow-x:auto; padding:0.5rem 0; }
+  .tree-host svg{ display:block; margin:0 auto; }
+  .seq-label{ font-family:var(--mono); font-size:0.6rem; text-transform:uppercase; letter-spacing:0.08em; color:rgba(200,200,212,0.5); margin:1rem 0 0.4rem; }
+  .seq{ display:flex; flex-wrap:wrap; gap:0.3rem; min-height:1.7rem; }
+  .seq .chip{ font-family:var(--mono); font-size:0.64rem; padding:0.18rem 0.45rem; border:1px solid var(--border-ink); color:var(--text-on-ink); background:rgba(255,255,255,0.03); animation:chipIn .3s var(--ease); }
+  .seq .chip i{ font-style:normal; color:var(--gold); margin-right:0.3rem; opacity:0.8; }
+  @keyframes chipIn{ from{ opacity:0; transform:translateY(3px);} to{ opacity:1; transform:none; } }
+
+  .lab-info{
+    margin-top:1rem; padding:0.8rem 1rem; background:rgba(255,255,255,0.04); border:1px solid var(--border-ink);
+    font-family:var(--sans); font-size:0.82rem; color:rgba(200,200,212,0.75); line-height:1.55; min-height:2.6rem;
+    border-left:3px solid rgba(255,255,255,0.15); transition:border-color 0.25s ease;
+  }
+  .lab-info.active{ border-left-color:var(--gold); }
+  .lab-info strong{ color:var(--text-bright); font-weight:600; }
+  .lab-info code{ background:rgba(255,255,255,0.05); border-color:var(--border-ink); }
+  .lab-hint{ font-family:var(--mono); font-size:0.62rem; color:rgba(200,200,212,0.45); text-align:center; margin-top:0.8rem; }
+
+  /* tree svg */
+  .te{ fill:none; stroke:rgba(255,255,255,0.2); stroke-width:1.2; transition:stroke .2s, opacity .35s; }
+  .te.v{ stroke-dasharray:4 3; stroke:rgba(200,200,212,0.25); }
+  .te.path{ stroke:var(--gold); stroke-width:1.9; }
+  .tn{ cursor:pointer; transition:opacity .35s; outline:none; }
+  .tn rect{ fill:rgba(255,255,255,0.04); stroke:rgba(107,141,173,0.75); stroke-width:1.1; transition:all .2s; }
+  .tn.leaf rect{ stroke:rgba(91,166,138,0.8); }
+  .tn.root rect{ stroke:rgba(201,168,76,0.8); }
+  .tn.virtual{ cursor:default; }
+  .tn.virtual rect{ fill:none; stroke:rgba(200,200,212,0.35); stroke-dasharray:4 3; }
+  .tn.virtual .ty{ fill:rgba(200,200,212,0.5); font-style:italic; }
+  .tn:hover rect{ fill:rgba(255,255,255,0.09); }
+  .tn.path rect{ stroke:var(--gold); }
+  .tn.sel rect, .tn.hl rect{ fill:rgba(201,168,76,0.22); stroke:var(--gold); stroke-width:1.7; }
+  .tn .ty{ font-family:var(--sans); font-size:10.5px; font-weight:500; fill:var(--text-bright); text-anchor:middle; pointer-events:none; }
+  .tn .va{ font-family:var(--mono); font-size:9.5px; fill:var(--gold); text-anchor:middle; pointer-events:none; }
+  .pending{ opacity:0; }
+
+  /* explorer */
+  .ex-grid{ display:grid; grid-template-columns:1.1fr 1fr; gap:1.2rem; }
+  @media (max-width:720px){ .ex-grid{ grid-template-columns:1fr; } }
+  .pp{ background:rgba(255,255,255,0.03); border:1px solid var(--border-ink); padding:1.1rem 1.2rem; }
+  .pp-eyebrow{ font-family:var(--mono); font-size:0.6rem; text-transform:uppercase; letter-spacing:0.08em; color:rgba(200,200,212,0.55); margin-bottom:0.4rem; }
+  .pp-title{ font-family:var(--serif); font-size:1.4rem; font-weight:600; color:var(--text-bright); margin-bottom:0.3rem; }
+  .pp-tag{ font-family:var(--sans); font-size:0.8rem; color:rgba(200,200,212,0.65); font-style:italic; margin-bottom:0.8rem; line-height:1.5; }
+  .pp-row{ display:grid; grid-template-columns:4.8rem 1fr; gap:0.7rem; padding:0.6rem 0; border-top:1px solid var(--border-ink); font-size:0.78rem; }
+  .pp-k{ font-family:var(--mono); font-size:0.6rem; color:rgba(200,200,212,0.5); text-transform:uppercase; letter-spacing:0.06em; padding-top:3px; }
+  .pp-v{ color:rgba(200,200,212,0.85); line-height:1.55; min-width:0; }
+  .pp-v .m{ font-family:var(--mono); font-size:0.72rem; color:var(--text-bright); }
+  .coords{ display:flex; flex-wrap:wrap; gap:0.3rem; margin-bottom:0.35rem; }
+  .coord{ font-family:var(--mono); font-size:0.7rem; color:var(--ink); background:var(--gold); padding:0.1rem 0.42rem; }
+  .coord.last{ outline:1px solid var(--gold); outline-offset:2px; }
+  .hslots{ display:grid; grid-template-columns:repeat(8, 1fr); gap:3px; margin:0.15rem 0 0.4rem; }
+  .hs{ font-family:var(--mono); font-size:0.52rem; text-align:center; padding:0.32rem 0; border:1px dashed rgba(255,255,255,0.14); color:rgba(200,200,212,0.35); }
+  .hs.f{ border:1px solid rgba(201,168,76,0.6); background:var(--gold-dim); color:var(--gold); }
+  .neg{ color:var(--amber); }
+  .pos{ color:var(--teal); }
+
+  /* triangle */
+  .tri-wrap{ max-width:540px; margin:0 auto; }
+  .tri{ display:grid; grid-template-columns:1.5rem repeat(16, 1fr); gap:2px; }
+  .tri .c{ aspect-ratio:1; background:rgba(255,255,255,0.025); border:1px solid rgba(255,255,255,0.04); }
+  .tri .c.v{ background:rgba(91,166,138,0.22); border-color:rgba(91,166,138,0.45); cursor:pointer; transition:background .2s, border-color .2s; }
+  .tri .c.v.off{ background:rgba(255,255,255,0.03); border-color:rgba(255,255,255,0.07); }
+  .tri .c.v:hover{ border-color:var(--text-bright); }
+  .tri .c.used{ background:var(--gold) !important; border-color:var(--gold) !important; }
+  .tri .c.focus{ background:rgba(201,168,76,0.55) !important; border-color:var(--gold) !important; }
+  .tri .ax{ font-family:var(--mono); font-size:0.5rem; color:rgba(200,200,212,0.45); display:flex; align-items:center; justify-content:center; }
+  .tri-axis{ font-family:var(--mono); font-size:0.58rem; color:rgba(200,200,212,0.5); text-align:center; margin-top:0.4rem; letter-spacing:0.04em; }
+  .tri-axis.y{ text-align:left; margin:0 0 0.4rem; }
+  .tri-ctrl{ display:flex; align-items:center; gap:1rem; flex-wrap:wrap; margin-top:1.1rem; }
+  .tri-ctrl input[type=range]{ flex:1; min-width:160px; accent-color:var(--gold); }
+  .tri-count{ font-family:var(--serif); font-size:2rem; font-weight:700; color:var(--gold); line-height:1; }
+  .tri-count small{ font-family:var(--mono); font-size:0.6rem; font-weight:400; color:rgba(200,200,212,0.5); letter-spacing:0.05em; display:block; margin-top:0.25rem; text-transform:uppercase; }
+  .tri-legend{ display:flex; gap:1rem; flex-wrap:wrap; font-family:var(--mono); font-size:0.58rem; color:rgba(200,200,212,0.55); margin-top:0.8rem; }
+  .tri-legend span::before{ content:''; display:inline-block; width:9px; height:9px; margin-right:0.35rem; vertical-align:-1px; }
+  .tri-legend .l1::before{ background:rgba(91,166,138,0.35); border:1px solid rgba(91,166,138,0.6); }
+  .tri-legend .l2::before{ background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); }
+  .tri-legend .l3::before{ background:var(--gold); }
+
+  /* snippet A vs B */
+  .ab-grid{ display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+  @media (max-width:720px){ .ab-grid{ grid-template-columns:1fr; } }
+  .ab-col{ min-width:0; }
+  .ab-h{ font-family:var(--mono); font-size:0.66rem; letter-spacing:0.08em; text-transform:uppercase; color:var(--gold); margin-bottom:0.5rem; }
+  .ab-h span{ color:rgba(200,200,212,0.5); text-transform:none; letter-spacing:0.02em; }
+  pre.mini{ font-family:var(--mono); font-size:0.78rem; color:var(--text-bright); background:rgba(255,255,255,0.04); border:1px solid var(--border-ink); padding:0.7rem 0.9rem; line-height:1.6; overflow-x:auto; margin-bottom:0.7rem; }
+  pre.mini .k{ color:var(--steel); } pre.mini .n{ color:var(--amber); } pre.mini .z{ background:rgba(201,168,76,0.22); color:var(--gold); }
+  .tokstrip{ display:flex; flex-wrap:wrap; gap:0.25rem; margin-bottom:0.7rem; min-height:1.5rem; }
+  .tk{ font-family:var(--mono); font-size:0.62rem; padding:0.12rem 0.38rem; border:1px solid var(--border-ink); color:var(--text-on-ink); background:rgba(255,255,255,0.03); }
+  .tk.lay{ color:rgba(200,200,212,0.45); border-style:dashed; font-size:0.55rem; }
+  .tk.ded{ color:var(--ink); background:var(--gold); border:1px solid var(--gold); }
+  .ab-F{ font-family:var(--mono); font-size:0.68rem; color:var(--text-on-ink); margin-top:0.6rem; line-height:1.6; }
+  .ab-F b{ color:var(--gold); font-weight:500; }
+
+  /* pipeline figure */
+  .pipe-host{ overflow-x:auto; }
+  .pipe{ width:100%; min-width:560px; height:auto; display:block; }
+  .pipe .bx{ fill:rgba(255,255,255,0.035); stroke-width:1.1; }
+  .pipe .t{ font-family:var(--mono); font-size:10.5px; fill:var(--text-bright); text-anchor:middle; }
+  .pipe .h{ font-family:var(--mono); font-size:9px; letter-spacing:0.1em; text-anchor:middle; text-transform:uppercase; }
+  .pipe .ar{ fill:none; stroke-width:1.1; }
+
+  /* knowledge checks */
+  details.check{ background:var(--paper-white); border:1px solid var(--border-paper); border-left:3px solid var(--gold); padding:0.85rem 1.2rem; margin:0.8rem 0; }
+  details.check summary{ cursor:pointer; font-weight:600; color:var(--text-dark); font-size:0.94rem; list-style:none; display:flex; gap:0.7rem; align-items:baseline; }
+  details.check summary::-webkit-details-marker{ display:none; }
+  details.check summary::before{ content:'+'; font-family:var(--mono); color:var(--gold); font-weight:500; width:0.8rem; flex-shrink:0; }
+  details.check[open] summary::before{ content:'–'; }
+  details.check p{ margin:0.7rem 0 0 1.5rem; font-size:0.92rem; }
+
+  ul.refs{ list-style:none; margin:1rem 0 0; }
+  ul.refs li{ font-size:0.84rem; color:var(--text-mid); padding:0.45rem 0; border-bottom:1px solid var(--border-paper); line-height:1.55; }
+  ul.refs li:last-child{ border-bottom:none; }
+
+  /* ===== FOOTER ===== */
+  footer{ background:var(--ink); color:var(--text-on-ink); margin-top:3rem; }
+  .footer-inner{ max-width:var(--max-w); margin:0 auto; padding:2.6rem 2rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; }
+  .footer-left{ font-family:var(--serif); font-size:1.1rem; }
+  .footer-left span{ color:var(--gold); }
+  .footer-links{ display:flex; gap:1.3rem; }
+  .footer-links a{ font-size:0.8rem; color:var(--text-on-ink); opacity:0.6; }
+  .footer-links a:hover{ opacity:1; color:var(--gold); text-decoration:none; }
+  .footer-note{ max-width:var(--max-w); margin:0 auto; padding:0 2rem 1.6rem; font-family:var(--mono); font-size:0.62rem; color:rgba(200,200,212,0.3); }
+
+  @media (max-width:640px){
+    .hero h1{ font-size:2.1rem; }
+    .hero-dek{ font-size:1.05rem; }
+    .hero-tree{ display:none; }
+    .content{ padding:0 1.2rem; }
+    .topbar-inner{ padding:0 1.2rem; }
+    .hero-inner{ padding:0 1.2rem; }
+    .lab{ padding:1.3rem 1rem 1.5rem; }
+    .pp-row{ grid-template-columns:1fr; gap:0.2rem; }
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{ animation:none !important; transition:none !important; }
+    html{ scroll-behavior:auto; }
+  }
+
+  /* ===== DIFFUSION POST ===== */
+  .series-nav{ display:flex; justify-content:space-between; gap:1rem; flex-wrap:wrap; font-family:var(--mono); font-size:0.68rem; letter-spacing:0.04em; margin:0 0 1.8rem; }
+  .series-nav a{ color:var(--text-light); }
+  .series-nav a:hover{ color:var(--gold); }
+  .hero-noise{ position:absolute; right:2rem; bottom:1.5rem; font-family:var(--mono); font-size:0.68rem; line-height:1.7; color:rgba(201,168,76,0.75); text-align:right; z-index:0; opacity:0.85; }
+  .hero-noise span{ display:block; }
+  .hero-noise .m{ color:rgba(200,200,212,0.3); }
+  @media (max-width:640px){ .hero-noise{ display:none; } }
+  table.claims td:first-child{ font-style:italic; color:var(--text-dark); width:36%; }
+
+  .two-col{ display:grid; grid-template-columns:1fr 1fr; gap:1.1rem; }
+  .two-col > *{ min-width:0; }
+  @media (max-width:760px){ .two-col{ grid-template-columns:1fr; } }
+  .panel{ background:rgba(255,255,255,0.03); border:1px solid var(--border-ink); padding:1rem 1.1rem; min-width:0; }
+  .panel-h{ font-family:var(--mono); font-size:0.6rem; text-transform:uppercase; letter-spacing:0.08em; color:rgba(200,200,212,0.55); margin-bottom:0.6rem; }
+  .ctrl-label{ font-family:var(--mono); font-size:0.6rem; text-transform:uppercase; letter-spacing:0.08em; color:rgba(200,200,212,0.55); margin:0.3rem 0 0.4rem; display:flex; justify-content:space-between; gap:1rem; }
+  .ctrl-label b{ color:var(--gold); font-weight:500; }
+  input[type=range]{ width:100%; accent-color:var(--gold); }
+  .kv-line{ font-size:0.8rem; color:rgba(200,200,212,0.8); margin:0.5rem 0; line-height:1.55; }
+  .kv-line b{ color:var(--text-bright); font-weight:600; }
+  .step-count{ font-family:var(--mono); font-size:0.64rem; color:rgba(200,200,212,0.6); margin-left:auto; }
+
+  /* token canvas */
+  .canvas{ font-family:var(--mono); font-size:0.82rem; background:rgba(255,255,255,0.04); border:1px solid var(--border-ink); padding:0.8rem 0.9rem; line-height:2.2; color:var(--text-bright); min-height:3rem; }
+  .canvas .tk{ display:inline-block; padding:0 0.32rem; margin:0 2px 2px 0; border-bottom:2px solid transparent; transition:all .25s var(--ease); min-width:1.1rem; text-align:center; white-space:pre; }
+  .canvas .tk.m{ background:rgba(255,255,255,0.07); color:rgba(200,200,212,0.35); border-bottom-color:rgba(200,200,212,0.2); }
+  .canvas .tk.g{ color:rgba(212,149,107,0.85); font-style:italic; }
+  .canvas .tk.new{ background:rgba(201,168,76,0.25); border-bottom-color:var(--gold); }
+  .canvas .tk.bad{ color:var(--amber); border-bottom-color:var(--amber); }
+  .canvas .tk.span{ border-bottom-color:var(--teal); }
+  .canvas .nl{ display:block; height:0; }
+  .canvas .ind{ display:inline-block; width:1.6rem; }
+  .canvas.light{ background:var(--paper-white); border-color:var(--border-paper); color:var(--text-dark); }
+
+  /* order heatmap */
+  .order{ display:flex; flex-wrap:wrap; gap:3px; margin-top:0.6rem; }
+  .order .o{ font-family:var(--mono); font-size:0.58rem; min-width:1.9rem; padding:0.2rem 0.25rem; text-align:center; border:1px solid var(--border-ink); color:rgba(200,200,212,0.6); }
+  .meters{ display:flex; gap:1.6rem; flex-wrap:wrap; margin-top:0.8rem; }
+  .mnum{ font-family:var(--serif); font-size:1.7rem; font-weight:700; color:var(--gold); line-height:1; }
+  .mnum small{ display:block; font-family:var(--mono); font-size:0.55rem; font-weight:400; color:rgba(200,200,212,0.5); letter-spacing:0.06em; text-transform:uppercase; margin-top:0.3rem; }
+  .mnum.soft{ color:var(--text-bright); }
+  .badge{ display:inline-block; font-family:var(--mono); font-size:0.62rem; letter-spacing:0.06em; text-transform:uppercase; padding:0.2rem 0.55rem; border:1px solid; }
+  .badge.ok{ color:var(--ink); background:var(--teal); border-color:var(--teal); }
+  .badge.bad{ color:var(--amber); border-color:var(--amber); }
+  .badge.run{ color:var(--gold); border-color:var(--gold); }
+
+  /* candidate list */
+  .cands{ display:flex; flex-direction:column; gap:0.35rem; }
+  .cand{ display:grid; grid-template-columns:1.6rem 1fr 4.5rem; gap:0.6rem; align-items:center; font-family:var(--mono); font-size:0.74rem; padding:0.4rem 0.6rem; border:1px solid var(--border-ink); color:var(--text-on-ink); }
+  .cand .r{ color:rgba(200,200,212,0.45); }
+  .cand .res{ text-align:right; font-size:0.62rem; }
+  .cand.pass{ border-color:rgba(91,166,138,0.7); background:rgba(91,166,138,0.08); }
+  .cand.pass .res{ color:var(--teal); }
+  .cand.fail .res{ color:var(--amber); }
+  .cand.out{ opacity:0.35; }
+
+  /* coupled masks */
+  .mrow{ display:flex; align-items:center; gap:0.6rem; margin:0.35rem 0; }
+  .mrow .lbl{ font-family:var(--mono); font-size:0.58rem; text-transform:uppercase; letter-spacing:0.05em; color:rgba(200,200,212,0.55); width:6.5rem; flex-shrink:0; }
+  .cells{ display:flex; gap:3px; flex-wrap:wrap; }
+  .cell{ font-family:var(--mono); font-size:0.6rem; min-width:2.1rem; padding:0.25rem 0.2rem; text-align:center; border:1px solid var(--border-ink); color:rgba(200,200,212,0.7); }
+  .cell.mk{ background:rgba(201,168,76,0.25); border-color:var(--gold); color:var(--gold); }
+  .cell.c0{ background:rgba(212,149,107,0.18); border-color:var(--amber); color:var(--amber); }
+  .cell.c1{ background:rgba(91,166,138,0.18); border-color:var(--teal); color:var(--teal); }
+  .cell.c2{ background:rgba(107,141,173,0.28); border-color:var(--steel); color:var(--text-bright); }
+
+  /* lintseq */
+  .codepane{ font-family:var(--mono); font-size:0.74rem; background:rgba(255,255,255,0.03); border:1px solid var(--border-ink); padding:0.5rem 0; line-height:1.75; overflow-x:auto; min-height:9rem; }
+  .codepane div{ padding:0 0.8rem; white-space:pre; color:var(--text-on-ink); border-left:3px solid transparent; }
+  .codepane div.del{ color:var(--amber); text-decoration:line-through; border-left-color:var(--amber); background:rgba(212,149,107,0.08); }
+  .codepane div.cas{ color:rgba(212,149,107,0.7); text-decoration:line-through; border-left-color:rgba(212,149,107,0.5); }
+  .codepane div.add{ color:var(--teal); border-left-color:var(--teal); background:rgba(91,166,138,0.08); }
+  .codepane div.err{ color:var(--amber); }
+  .codepane div.err::after{ content:'   ← linter error'; color:rgba(212,149,107,0.7); font-size:0.62rem; }
+  .codepane .ln{ color:rgba(200,200,212,0.3); margin-right:0.8rem; }
+  .codepane .empty{ color:rgba(200,200,212,0.35); font-style:italic; }
+  .states{ display:flex; flex-wrap:wrap; gap:0.3rem; margin:0.5rem 0; }
+  .states button{ font-family:var(--mono); font-size:0.62rem; padding:0.25rem 0.5rem; border:1px solid var(--border-ink); background:transparent; color:var(--text-on-ink); cursor:pointer; }
+  .states button.on{ border-color:var(--gold); color:var(--ink); background:var(--gold); }
+  .states button.err{ border-color:var(--amber); color:var(--amber); }
+  .states button.on.err{ background:var(--amber); color:var(--ink); }
+
+  /* quiz */
+  .quiz-q{ padding:1rem 0; border-bottom:1px solid var(--border-ink); }
+  .quiz-q:last-child{ border-bottom:none; }
+  .quiz-q .qt{ font-size:0.88rem; color:var(--text-bright); margin-bottom:0.6rem; line-height:1.5; }
+  .quiz-q .opts{ display:flex; flex-direction:column; gap:0.35rem; }
+  .opt{ text-align:left; font-family:var(--sans); font-size:0.8rem; padding:0.5rem 0.75rem; border:1px solid var(--border-ink); background:rgba(255,255,255,0.02); color:var(--text-on-ink); cursor:pointer; }
+  .opt:hover{ border-color:rgba(201,168,76,0.5); }
+  .opt:focus-visible{ outline:2px solid var(--gold); outline-offset:1px; }
+  .opt.right{ border-color:var(--teal); color:var(--text-bright); background:rgba(91,166,138,0.12); }
+  .opt.wrong{ border-color:var(--amber); color:rgba(200,200,212,0.6); }
+  .quiz-q .fb{ font-size:0.8rem; color:rgba(200,200,212,0.8); margin-top:0.55rem; line-height:1.55; }
+
+  .pipe-host{ overflow-x:auto; }
+  .pipe{ width:100%; min-width:560px; height:auto; display:block; }
+  .pipe .bx{ fill:rgba(255,255,255,0.035); stroke-width:1.1; }
+  .pipe .t{ font-family:var(--mono); font-size:10.5px; fill:var(--text-bright); text-anchor:middle; }
+  .pipe .s{ font-family:var(--mono); font-size:8.5px; fill:rgba(200,200,212,0.6); text-anchor:middle; }
+  .pipe .ar{ fill:none; stroke-width:1.1; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="topbar-name">Aakash <span>Vanmali</span></div>
+    <div class="topbar-links">
+      <a href="index.html">Writing</a>
+      <a href="../index.html">Portfolio</a>
+    </div>
+  </div>
+</div>
+
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-eyebrow">Notebook · Code Generation · Diffusion</div>
+    <h1>Sculpting Code out of Noise</h1>
+    <p class="hero-dek">Study notes on diffusion code models — how CodeFusion, DiffuCoder, TreeDiff and LintSeq write a program by refining all of it at once, instead of one token after another.</p>
+    <div class="hero-meta">Forward &amp; reverse noise · Masked diffusion · Decoding order · Coupled-GRPO · AST span masking · Edit sequences</div>
+  </div>
+  <div class="hero-noise" aria-hidden="true">
+    <span><span class="m">▢ ▢ ▢ ▢ ▢ ▢ ▢</span></span>
+    <span><span class="m">▢</span> is_even <span class="m">▢ ▢ ▢ ▢</span></span>
+    <span>def is_even(n): <span class="m">▢ ▢</span></span>
+    <span>def is_even(n): return n % 2 == 0</span>
+  </div>
+</div>
+
+<div class="content">
+  <article>
+
+    <p class="lead">Every code model I'd used until now writes like a typewriter: one token, then the next, never looking back. Diffusion models write more like a sculptor. They start with a block of noise the size of the whole program and chip away at all of it at once, over several passes, until code emerges. The question I set out to answer: does that actually help for code, and why?</p>
+
+    <p>These notes work through four papers in order: <a href="https://aclanthology.org/2023.emnlp-main.716/" target="_blank">CodeFusion</a> (EMNLP 2023), <a href="https://arxiv.org/abs/2506.20639" target="_blank">DiffuCoder</a> (2025), <a href="https://arxiv.org/abs/2508.01473" target="_blank">TreeDiff</a> (2025) and <a href="https://arxiv.org/abs/2410.02749" target="_blank">LintSeq</a> (ICLR 2025). As in my other notebooks, nothing is assumed: diffusion, masking, reinforcement learning and the rest are built from scratch, with seven labs along the way. Two earlier notes connect here: <a href="tree-positional-encoding.html">tree positional encoding</a> (for ASTs) and <a href="grammar-constrained-decoding.html">grammar-constrained decoding</a> (for the other kind of "mask").</p>
+
+    <h3 class="sub">The summary I started with, and what I had to correct</h3>
+
+    <p>My starting summary was: <em>instead of generating left-to-right, start with noise and iteratively refine the entire program. CodeFusion at 75M parameters matched autoregressive models at 350M–175B on top-1 accuracy and beat them on top-3/top-5. TreeDiff added AST-guided noise — corrupt structurally important tokens first, denoise them last, so the model builds structure before content.</em> The first sentence holds up. The other two needed real corrections once I read the papers:</p>
+
+    <div class="table-wrap"><table class="claims">
+      <thead><tr><th>What I thought</th><th>More precisely</th></tr></thead>
+      <tbody>
+        <tr><td>"Start with noise, refine the whole program"</td><td>True for CodeFusion (Gaussian noise on embeddings), DiffuCoder and TreeDiff (every token starts as [MASK]). LintSeq isn't a diffusion model at all: it trains an ordinary left-to-right model to write code as a sequence of edits. It belongs on the list because it borrows the "build it up in passes" idea.</td></tr>
+        <tr><td>"CodeFusion 75M matched 350M–175B models"</td><td>That's what the paper reports — but with important fine print. The Python score is a similarity metric, not "does it run"; the biggest models were prompted with five examples rather than fine-tuned; the programs were short; and the arXiv preprint was withdrawn days after release. Section 04 has the details.</td></tr>
+        <tr><td>"TreeDiff corrupts structure first and denoises it last, so structure is built before content"</td><td>Not what the paper does. TreeDiff changes <em>what</em> gets masked during training: whole AST subtrees instead of scattered tokens. It doesn't set an order. A variant that masked structural tokens more heavily actually did worse. Section 06 explains.</td></tr>
+      </tbody>
+    </table></div>
+
+    <ol class="route">
+      <li><span>01</span>What left-to-right generation can't do</li>
+      <li><span>02</span>Diffusion from zero: add noise, learn to remove it</li>
+      <li><span>03</span>Masked diffusion: deciding what to reveal first</li>
+      <li><span>04</span>CodeFusion (2023): continuous diffusion for code</li>
+      <li><span>05</span>DiffuCoder (2025): a 7B masked diffusion coder, and RL for it</li>
+      <li><span>06</span>TreeDiff (2025): masking whole syntax subtrees</li>
+      <li><span>07</span>LintSeq (2025): the same intuition, without diffusion</li>
+      <li><span>08</span>Putting it together</li>
+    </ol>
+
+    <!-- ================= 01 ================= -->
+    <div class="section-header">
+      <span class="section-number">01</span>
+      <span class="section-title">What left-to-right generation can't do</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>A standard language model is <strong>autoregressive</strong> (AR): it predicts token 1, appends it, predicts token 2 given token 1, and so on. Formally it factorizes the probability of a program into a chain:</p>
+
+    <div class="formula-block"><span class="name">Autoregressive factorization</span>p(y) = p(y₁) · p(y₂ | y₁) · p(y₃ | y₁, y₂) · … · p(yₙ | y₁ … yₙ₋₁)</div>
+
+    <p>This works astonishingly well, but it has a built-in constraint that CodeFusion's paper opens with: imagine a developer who can only ever change the <em>last</em> line they wrote. Once an AR model commits to a token, that token is permanent. If it picks the wrong function name early, everything afterwards has to live with it. It also means the model can't sketch the shape of a function — its signature, its return statement — and fill in the middle later, which is how many people actually write code.</p>
+
+    <p>There are workarounds within AR: sample many programs and pick the best, or use beam search. But samples from one AR model tend to look alike. Diversity matters: if you can test five candidates, five near-copies are worth little more than one. That diversity point comes back with CodeFusion.</p>
+
+    <!-- ================= 02 ================= -->
+    <div class="section-header">
+      <span class="section-number">02</span>
+      <span class="section-title">Diffusion from zero: add noise, learn to remove it</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>Diffusion models made their name in images. The idea fits in two sentences. First, take real data and gradually destroy it by adding noise over many small steps, until nothing recognizable is left — this is the <strong>forward process</strong>, and it needs no learning. Then train a neural network to undo <em>one step</em> of that destruction — the <strong>reverse process</strong>. To generate, start from pure noise and apply the learned undo step over and over.</p>
+
+    <div class="formula-block"><span class="name">The two processes</span>forward (fixed):&nbsp;&nbsp;&nbsp;x₀ → x₁ → x₂ → … → x_T&nbsp;&nbsp;&nbsp;<span class="case">clean program → pure noise</span>
+<br>reverse (learned):&nbsp;x_T → … → x₂ → x₁ → x₀&nbsp;&nbsp;&nbsp;<span class="case">noise → program, one denoising step at a time</span><span class="sub">t is the timestep: t = 0 is clean data, t = T is pure noise. Training samples a random t, corrupts a real example to that level, and asks the network to recover it.</span></div>
+
+    <p>The key difference from AR: at every reverse step, the network sees and updates the <em>whole</em> sequence at once. Nothing is permanent until the end. That's the sculptor, not the typewriter.</p>
+
+    <h3 class="sub">Two ways to add noise to text</h3>
+
+    <p>Images are continuous — you can add a little Gaussian noise to a pixel. Tokens are discrete — there's no "slightly noisy <code>return</code>". Text diffusion splits into two families on exactly this point:</p>
+
+    <div class="table-wrap"><table>
+      <thead><tr><th>Family</th><th>What "noise" means</th><th>Who uses it</th></tr></thead>
+      <tbody>
+        <tr><td class="metric-name">Continuous</td><td>Turn each token into its embedding vector, add Gaussian noise to the vectors, and at the end map vectors back to tokens.</td><td>CodeFusion, and earlier text models like Diffusion-LM and GENIE</td></tr>
+        <tr><td class="metric-name">Discrete (masked)</td><td>Replace tokens with a special [MASK] token. More noise means more masks; pure noise means every token is masked.</td><td>LLaDA, Dream, DiffuCoder, TreeDiff</td></tr>
+      </tbody>
+    </table></div>
+
+    <p>Drag the noise level in the lab to see both kinds of corruption on the same line of code. In the continuous version, each token's vector drifts, and the nearest-token readout starts returning wrong tokens. In the masked version, tokens simply disappear.</p>
+
+    <!-- LAB 1 -->
+    <div class="lab" id="lab1">
+      <div class="lab-head">
+        <div class="lab-title"><span class="dot"></span> Noise lab — the forward process on code</div>
+        <div class="lab-sub">drag t from clean to pure noise</div>
+      </div>
+      <div class="ctrl-label">Noise level t <b id="l1T">0.00</b></div>
+      <input type="range" id="l1Slider" min="0" max="100" value="0" aria-label="Noise level">
+      <div class="two-col" style="margin-top:1rem">
+        <div>
+          <div class="panel-h">Continuous (Gaussian on embeddings → nearest token)</div>
+          <div class="canvas" id="l1Cont"></div>
+        </div>
+        <div>
+          <div class="panel-h">Discrete (masked)</div>
+          <div class="canvas" id="l1Mask"></div>
+        </div>
+      </div>
+      <div class="lab-btns" style="margin-top:0.9rem"><button class="lab-btn ghost" id="l1Re">Resample the noise</button></div>
+      <div class="lab-info active" id="l1Info"></div>
+    </div>
+
+    <p>Both pictures share one important property: at a middle noise level, part of the program is still visible, and the network learns to use that visible part to fill in the rest — in any order, from either side. That's how a diffusion model learns that <code>return</code> usually appears near the end of a function even before it knows what comes before it.</p>
+
+    <div class="callout"><strong>Two different "masks".</strong> In my <a href="grammar-constrained-decoding.html">grammar-constrained decoding notes</a>, a mask meant setting a token's <em>score</em> to −∞ so it can't be chosen. Here, [MASK] is a <em>token</em> placed in the sequence, meaning "unknown — fill me in". Same word, different idea. The two can even be combined: constrain which tokens may fill a [MASK].</div>
+
+    <!-- ================= 03 ================= -->
+    <div class="section-header">
+      <span class="section-number">03</span>
+      <span class="section-title">Masked diffusion: deciding what to reveal first</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>Masked diffusion is now the dominant family for large text diffusion models, so it's worth understanding how one actually writes. Generation starts with a canvas of, say, 256 [MASK] tokens after the prompt. Then, at each step:</p>
+
+    <div class="formula-block"><span class="name">One step of masked diffusion decoding</span>1. Run the network once on the whole canvas → a prediction for every masked position
+<br>2. Pick some of those positions to commit (fill in for good)
+<br>3. Leave the rest as [MASK] and repeat<span class="sub">The most common rule for step 2 is "low-confidence remasking": commit the positions the model is most confident about, keep the rest masked.</span></div>
+
+    <p>Two dials control everything. <strong>Which positions</strong> to commit determines the generation order — nothing forces it to be left-to-right. <strong>How many</strong> to commit per step trades speed for quality. One token per step means as many network calls as an AR model. Several per step is faster — but tokens committed in the <em>same</em> step are predicted independently of each other, so if they depend on one another, they can disagree.</p>
+
+    <p>The lab makes both dials concrete. The model is a toy with scripted confidences, but the failure it shows is real: commit two dependent tokens in the same step and you can get <code>def is_even(n): return x % 2 == 0</code> — each token plausible on its own, the pair inconsistent.</p>
+
+    <!-- LAB 2 -->
+    <div class="lab" id="lab2">
+      <div class="lab-head">
+        <div class="lab-title"><span class="dot"></span> Unmasking lab — order and parallelism</div>
+        <div class="lab-sub">toy model with scripted confidences</div>
+      </div>
+      <div class="lab-btns" id="l2Strat"></div>
+      <div class="ctrl-label">Tokens committed per step <b id="l2KV">1</b></div>
+      <input type="range" id="l2K" min="1" max="4" value="1" aria-label="Tokens per step">
+      <div class="lab-btns" style="margin-top:0.8rem">
+        <button class="lab-btn on" id="l2Step">Next step →</button>
+        <button class="lab-btn ghost" id="l2Run">Run to end</button>
+        <button class="lab-btn ghost" id="l2Reset">Reset</button>
+        <span class="step-count" id="l2Count"></span>
+      </div>
+      <div class="canvas" id="l2Canvas"></div>
+      <div class="panel-h" style="margin-top:0.9rem">Step at which each position was committed</div>
+      <div class="order" id="l2Order"></div>
+      <div class="meters" id="l2Meters"></div>
+      <div class="lab-info active" id="l2Info"></div>
+    </div>
+
+    <p>The two numbers under the lab are DiffuCoder's measures of how "left-to-right" a decoding run was, which we'll meet properly in Section 05. Confidence-based decoding tends to wait for the parameter name before writing <code>n</code> in the body, simply because the body's <code>n</code> is uncertain until then. Random order doesn't wait. And the more tokens you commit per step, the more often two dependent tokens land in the same step — try random order at 3 or 4 per step a few times.</p>
+
+    <!-- ================= 04 ================= -->
+    <div class="section-header">
+      <span class="section-number">04</span>
+      <span class="section-title">CodeFusion (2023): continuous diffusion for code</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>CodeFusion (Singh, Cambronero, Gulwani, Le, Negreanu and Verbruggen at Microsoft; EMNLP 2023) was the first diffusion model for turning natural-language requests into code. It belongs to the continuous family, and its main idea is a fix for that family's weak spot.</p>
+
+    <h3 class="sub">The problem with rounding</h3>
+
+    <p>Earlier text diffusion models denoised embeddings and then, at the very end, mapped each position to its nearest vocabulary token — independently. For prose, a slightly-off word is fine. For code, independent rounding easily produces <code>print(x</code> or a misspelled variable, and the program won't parse. CodeFusion measured this directly: only 24.2% of GENIE's top Python outputs were syntactically valid, against 67.6% for CodeFusion.</p>
+
+    <h3 class="sub">The architecture</h3>
+
+    <p>CodeFusion has four parts, with 75 million parameters in total:</p>
+
+    <div class="table-wrap"><table>
+      <thead><tr><th>Part</th><th>Job</th></tr></thead>
+      <tbody>
+        <tr><td class="metric-name">Encoder</td><td>Reads the English request and turns it into vectors (a pre-trained CodeT5 encoder).</td></tr>
+        <tr><td class="metric-name">Denoiser</td><td>A 10-layer Transformer. Given the noisy program embeddings, the timestep and the encoded request, it predicts the noise to remove. Runs once per diffusion step.</td></tr>
+        <tr><td class="metric-name">Decoder</td><td>A 6-layer Transformer that runs once, after denoising finishes. It sees all the denoised positions together (full self-attention) plus the request.</td></tr>
+        <tr><td class="metric-name">Classification head</td><td>Turns each decoder output into a token. No search — it takes the most likely token at each position.</td></tr>
+      </tbody>
+    </table></div>
+
+    <p>The decoder is the fix. Instead of rounding each position on its own, every final token is chosen with knowledge of every other position. Inference starts from Gaussian noise and runs 1,200 denoising steps; the ablations show that replacing the decoder with plain rounding costs roughly 3–10 points, depending on the language and the rounding variant.</p>
+
+    <h3 class="sub">Pre-training on code-aware noise</h3>
+
+    <p>Before fine-tuning on (request, code) pairs, CodeFusion pre-trains the denoiser and decoder on code alone with two tasks. One is plain unconditional generation. The other adapts a task called continuous paragraph denoising to code: it adds noise <em>only</em> to identifiers and language keywords — variable names, function names, <code>for</code>, <code>if</code>. The model has to reconstruct exactly the tokens that carry a program's meaning from the context around them. Removing either pre-training task hurt every language.</p>
+
+    <div class="callout">This is the closest any of the four papers comes to my original "structure-aware noise" intuition — and it's in CodeFusion, not TreeDiff. CodeFusion chooses <em>which kind</em> of token to corrupt during pre-training; it still doesn't impose an order at generation time.</div>
+
+    <h3 class="sub">The headline result, and why diversity matters</h3>
+
+    <p>CodeFusion was tested on three tasks: Python snippets from Stack Overflow (CoNaLa), one-line Bash commands, and Excel conditional-formatting rules. The top-1 / top-3 / top-5 columns ask: is a correct answer among the model's first one, three or five suggestions?</p>
+
+    <div class="table-wrap"><table>
+      <thead><tr><th>System</th><th>Params</th><th>Python top-1 / 3 / 5</th><th>Bash top-1 / 3 / 5</th><th>Excel top-1 / 3 / 5</th></tr></thead>
+      <tbody>
+        <tr><td class="metric-name">GPT-3 (text-davinci-003), 5-shot</td><td class="mono">175B</td><td class="mono">82.5 / 83.7 / 85.8</td><td class="mono">66.9 / 67.7 / 68.4</td><td class="mono">70.3 / 72.4 / 72.8</td></tr>
+        <tr><td class="metric-name">CodeT5-large, fine-tuned</td><td class="mono">770M</td><td class="mono">80.5 / 83.1 / 85.0</td><td class="mono">67.6 / 69.3 / 70.5</td><td class="mono">72.7 / 75.3 / 75.8</td></tr>
+        <tr><td class="metric-name">CodeGen, fine-tuned</td><td class="mono">350M</td><td class="mono">80.1 / 81.8 / 83.7</td><td class="mono">67.2 / 69.2 / 70.3</td><td class="mono">71.4 / 73.7 / 75.0</td></tr>
+        <tr><td class="metric-name">GENIE (text diffusion)</td><td class="mono">93M</td><td class="mono">73.2 / 77.1 / 80.3</td><td class="mono">60.0 / 61.5 / 62.3</td><td class="mono">62.9 / 66.8 / 68.7</td></tr>
+        <tr><td class="metric-name">CodeFusion</td><td class="mono">75M</td><td class="mono">80.7 / 86.3 / 90.3</td><td class="mono">66.7 / 70.2 / 72.0</td><td class="mono">72.8 / 76.7 / 78.5</td></tr>
+      </tbody>
+    </table></div>
+
+    <p>So the claim holds in its own terms: top-1 roughly level with much larger models, and clearly ahead at top-3 and top-5. The paper's explanation is diversity. Its five candidates differ much more than an AR model's — more distinct n-grams and larger edit distances between them. AR beam search tends to return near-copies. The lab shows why that matters for top-k.</p>
+
+    <!-- LAB 3 -->
+    <div class="lab" id="lab3">
+      <div class="lab-head">
+        <div class="lab-title"><span class="dot"></span> Top-k lab — why diverse candidates win at k = 5</div>
+        <div class="lab-sub">illustrative candidates</div>
+      </div>
+      <div class="kv-line"><b>Request:</b> delete the folder <code>build</code> and everything inside it</div>
+      <div class="lab-btns" id="l3Src"></div>
+      <div class="ctrl-label">Show the top <b id="l3KV">1</b> candidates</div>
+      <input type="range" id="l3K" min="1" max="5" value="1" aria-label="Top-k">
+      <div class="cands" id="l3List" style="margin-top:0.8rem"></div>
+      <div class="meters" id="l3Meters"></div>
+      <div class="lab-info active" id="l3Info"></div>
+    </div>
+
+    <h3 class="sub">The fine print</h3>
+
+    <p>Reading the paper closely, a few details change how strongly I'd state the result:</p>
+
+    <p><strong>The Python metric isn't execution.</strong> Python was scored with CodeBERTScore, which measures similarity to a reference solution using a neural model. Exact-match accuracy for Python was around 5% for everyone (CodeFusion 5.1% top-1). Bash used template matching; only the Excel rules were scored by actually running them.</p>
+
+    <p><strong>The giant models weren't fine-tuned.</strong> GPT-3, ChatGPT, StarCoder and CodeT5+ were prompted with five similar examples; the fine-tuned baselines were 350M–770M. "Beats 175B" means "beats 175B used few-shot".</p>
+
+    <p><strong>Short programs only.</strong> The output canvas was 128 tokens, and the authors note that CodeFusion struggles with longer programs and long-range dependencies. Inference took about 2.3 seconds per example, with latency growing quadratically with length.</p>
+
+    <p><strong>The preprint was withdrawn.</strong> The arXiv version was withdrawn within a week of release. The notice says the authors had relied on a news article for information they couldn't verify — widely understood to be the parameter count it listed for ChatGPT. The EMNLP version lists ChatGPT's size as "Unknown". This doesn't affect CodeFusion's own numbers, but it's worth knowing when citing it.</p>
+
+    <!-- ================= 05 ================= -->
+    <div class="section-header">
+      <span class="section-number">05</span>
+      <span class="section-title">DiffuCoder (2025): a 7B masked diffusion coder, and RL for it</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>Between 2023 and 2025, masked diffusion scaled up. LLaDA and Dream showed 7–8B masked diffusion models could roughly match AR models of the same size. Commercial systems like Inception's Mercury and Google's Gemini Diffusion advertised strong coding at high speed. DiffuCoder (Gong, Zhang, Zheng, Gu, Jaitly, Kong and Zhang, from Apple and the University of Hong Kong) asks two questions: how do these models actually decode code, and how do you improve them with reinforcement learning?</p>
+
+    <h3 class="sub">The model</h3>
+
+    <p>DiffuCoder starts from an AR model, Qwen2.5-Coder-7B, and converts it into a masked diffusion model through continued training — about 130 billion effective tokens of code. Then come instruction tuning (436K examples) and a reinforcement learning stage on 21,000 hard problems with test cases.</p>
+
+    <div class="table-wrap"><table>
+      <thead><tr><th>Model (7–8B)</th><th>HumanEval</th><th>HumanEval+</th><th>MBPP</th><th>MBPP+</th></tr></thead>
+      <tbody>
+        <tr><td class="metric-name">Qwen2.5-Coder base (AR)</td><td class="mono">61.6</td><td class="mono">51.8</td><td class="mono">75.9</td><td class="mono">61.4</td></tr>
+        <tr><td class="metric-name">DiffuCoder base (diffusion)</td><td class="mono">67.1</td><td class="mono">60.4</td><td class="mono">74.2</td><td class="mono">60.9</td></tr>
+        <tr><td class="metric-name">Qwen2.5-Coder + same instruction data (AR)</td><td class="mono">82.9</td><td class="mono">75.6</td><td class="mono">80.1</td><td class="mono">66.1</td></tr>
+        <tr><td class="metric-name">DiffuCoder-Instruct</td><td class="mono">72.0</td><td class="mono">65.2</td><td class="mono">75.1</td><td class="mono">61.9</td></tr>
+        <tr><td class="metric-name">DiffuCoder-Instruct + coupled-GRPO</td><td class="mono">73.2</td><td class="mono">68.3</td><td class="mono">78.6</td><td class="mono">67.5</td></tr>
+      </tbody>
+    </table></div>
+
+    <p>Two things stand out. The base diffusion model is on par with its AR parent. But instruction tuning helped the AR model far more than the diffusion model, on the same data — a gap the authors use to motivate the RL work. Diffusion for code is competitive, not yet ahead.</p>
+
+    <h3 class="sub">How left-to-right is it, really? AR-ness</h3>
+
+    <p>DiffuCoder defines two measures of decoding order, both equal to 1 for a pure AR model:</p>
+
+    <div class="table-wrap"><table>
+      <thead><tr><th>Measure</th><th>Question it asks at each step</th></tr></thead>
+      <tbody>
+        <tr><td class="metric-name">Local AR-ness@k</td><td>Is the newly committed token the immediate successor of the previous k committed tokens — writing a contiguous run?</td></tr>
+        <tr><td class="metric-name">Global AR-ness@k</td><td>Is it one of the k leftmost still-masked positions — filling from the front?</td></tr>
+      </tbody>
+    </table></div>
+
+    <p>The lab in Section 03 computes the k = 1 versions live. The findings: diffusion models are fairly left-to-right but not fully, and models converted from AR ones keep more of that habit. <strong>Code is decoded less left-to-right than maths</strong> (lower and more variable global AR-ness): the model sometimes writes later parts of a program before earlier ones, a bit like a programmer jumping around a file. And in a diffusion model, <strong>temperature changes the order, not just the words</strong>. At temperature 1.2, generation order becomes much more varied, and pass@10 rises substantially.</p>
+
+    <p>They also found an <strong>entropy sink</strong>: on the first decoding step, the model is most confident about the positions immediately after the prompt, giving an L-shaped confidence curve. That's why confidence-based decoding still drifts left-to-right.</p>
+
+    <h3 class="sub">Reinforcement learning, from zero</h3>
+
+    <p>Reinforcement learning with verifiable rewards works like this for code: the model writes several solutions to a problem, each is run against tests, and the ones that pass get "reinforced" — their probability is pushed up. <strong>GRPO</strong> (Group Relative Policy Optimization) does this per problem: generate a group of G solutions, score each, and give each solution an advantage equal to its score minus the group's average. Above-average solutions are pushed up, below-average ones down.</p>
+
+    <p>Pushing a solution's probability up requires computing that probability. For an AR model that's easy — the chain rule from Section 01, one forward pass. A masked diffusion model has no such chain. Its log-probability can only be <em>estimated</em>: mask some tokens, ask the model to predict them, and use the cross-entropy on those positions. That estimate is noisy, and it only scores the tokens that happened to be masked.</p>
+
+    <h3 class="sub">Coupled-GRPO: complementary masks</h3>
+
+    <p>DiffuCoder's fix is simple and clever. For each solution, draw one random mask, then use its exact <em>complement</em> as a second mask. Run the model on both. Every token is masked — and therefore scored — in exactly one of the two passes. No token is skipped and none is double-counted. Statistically, this is the "antithetic variates" trick for reducing variance. Try it below: compare two independent random masks with a coupled pair.</p>
+
+    <!-- LAB 4 -->
+    <div class="lab" id="lab4">
+      <div class="lab-head">
+        <div class="lab-title"><span class="dot"></span> Coupled-mask lab — who gets scored?</div>
+        <div class="lab-sub">one completion, two forward passes</div>
+      </div>
+      <div class="lab-btns" id="l4Mode"></div>
+      <div class="ctrl-label">Mask ratio of the first pass (t) <b id="l4TV">0.50</b></div>
+      <input type="range" id="l4T" min="10" max="90" value="50" aria-label="Mask ratio">
+      <div style="margin-top:0.8rem">
+        <div class="mrow"><span class="lbl">Pass 1</span><div class="cells" id="l4A"></div></div>
+        <div class="mrow"><span class="lbl">Pass 2</span><div class="cells" id="l4B"></div></div>
+        <div class="mrow"><span class="lbl">Times scored</span><div class="cells" id="l4C"></div></div>
+      </div>
+      <div class="lab-btns" style="margin-top:0.8rem"><button class="lab-btn ghost" id="l4Re">Resample masks</button></div>
+      <div class="meters" id="l4Meters"></div>
+      <div class="lab-info active" id="l4Info"></div>
+    </div>
+
+    <p>With coupled-GRPO, EvalPlus rose by 4.4 points (63.6 → 67.9) from only 21K training problems. Baselines that used a single fully-masked pass or two independent masks trained unstably. A side effect I didn't expect: after RL, the model became less left-to-right, and lost less accuracy when decoding at double speed (half the steps) — RL made it better at parallel decoding.</p>
+
+    <!-- ================= 06 ================= -->
+    <div class="section-header">
+      <span class="section-number">06</span>
+      <span class="section-title">TreeDiff (2025): masking whole syntax subtrees</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>TreeDiff (Zeng and colleagues, led from the University of Connecticut; a workshop paper at ACL 2026) starts from a criticism of how masked diffusion models are trained: they mask tokens independently at random. In code, that scatters masks across syntactic units — half a condition here, one argument there. The model rarely has to reconstruct a <em>whole</em> loop, call or condition, which is exactly what it must do when generating.</p>
+
+    <h3 class="sub">The method: mask AST spans, keep the budget</h3>
+
+    <p>TreeDiff parses each training program into its abstract syntax tree (the same AST from my tree-encoding notes). Every node covers a span of tokens. Instead of masking tokens one by one, it masks entire spans: a whole <code>for</code> loop, a whole function call. The subtle part is keeping the overall amount of masking the same as random masking, so the comparison is fair. If random masking would hide each token with probability ε, TreeDiff masks a span of length ℓ with probability:</p>
+
+    <div class="formula-block"><span class="name">Span masking probability</span>pᵢ = 1 − (1 − ε)<sup>ℓᵢ</sup><span class="sub">The probability that at least one of the span's ℓ tokens would have been masked under token-wise masking. In expectation, the same number of tokens gets masked; they just come in whole syntactic units. Spans shorter than two tokens are skipped, and leftover budget is filled with random tokens.</span></div>
+
+    <p>Masking is applied during <strong>training</strong>. Generation still works like any masked diffusion model. Compare the three strategies the paper tested in the lab — including the one closest to my original summary.</p>
+
+    <!-- LAB 5 -->
+    <div class="lab" id="lab5">
+      <div class="lab-head">
+        <div class="lab-title"><span class="dot"></span> Masking lab — random tokens vs AST spans</div>
+        <div class="lab-sub">one training example, three corruption strategies</div>
+      </div>
+      <div class="lab-btns" id="l5Strat"></div>
+      <div class="ctrl-label">Corruption rate ε <b id="l5EV">0.30</b></div>
+      <input type="range" id="l5E" min="10" max="70" value="30" aria-label="Corruption rate">
+      <div class="canvas" id="l5Canvas" style="margin-top:0.9rem"></div>
+      <div class="lab-btns" style="margin-top:0.8rem"><button class="lab-btn ghost" id="l5Re">Resample</button></div>
+      <div class="meters" id="l5Meters"></div>
+      <div class="lab-info active" id="l5Info"></div>
+    </div>
+
+    <h3 class="sub">What they found</h3>
+
+    <p>TreeDiff fine-tuned LLaDA-8B-Instruct (an 8B masked diffusion model) on 150,000 examples from OpenCodeReasoning, each with a problem, a reasoning trace and a solution. Reasoning text got ordinary token masking; code got the AST strategy. Pass@1 results:</p>
+
+    <div class="table-wrap"><table>
+      <thead><tr><th>Training corruption</th><th>HumanEval @512</th><th>HumanEval @1024</th><th>MBPP @512</th></tr></thead>
+      <tbody>
+        <tr><td class="metric-name">None (LLaDA-Instruct as is)</td><td class="mono">28.66</td><td class="mono">32.32</td><td class="mono">25.89</td></tr>
+        <tr><td class="metric-name">Random token masking</td><td class="mono">31.71</td><td class="mono">33.54</td><td class="mono">31.13</td></tr>
+        <tr><td class="metric-name">Token masking weighted by AST node type</td><td class="mono">31.71</td><td class="mono">28.66</td><td class="mono">24.51</td></tr>
+        <tr><td class="metric-name">AST span masking (TreeDiff)</td><td class="mono">32.93</td><td class="mono">36.59</td><td class="mono">33.07</td></tr>
+      </tbody>
+    </table></div>
+
+    <p>(The "@512/@1024" is the generation length. The final version of the paper reports a 13.3% relative improvement over random masking.)</p>
+
+    <div class="callout gold"><strong>Where my summary went wrong.</strong> The middle row is the strategy closest to "corrupt structurally important tokens more": control flow masked with probability 0.60, conditionals 0.58, calls 0.42, everything else 0.15. It did <em>worse</em> than plain random masking on MBPP and on long HumanEval generations. What helped was keeping syntactic units intact — masking a whole unit or none of it. And nothing in TreeDiff sets a generation order. "Build the structure before the content" is an appealing idea, and DiffuCoder's lower AR-ness on code hints that models do plan non-sequentially. But it isn't what TreeDiff does or measures.</div>
+
+    <p>Some caution on the numbers too: the gains are a few points on 164 HumanEval problems, from one base model, in a workshop paper. It's a promising, simple idea rather than a settled result.</p>
+
+    <!-- ================= 07 ================= -->
+    <div class="section-header">
+      <span class="section-number">07</span>
+      <span class="section-title">LintSeq (2025): the same intuition, without diffusion</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <p>LintSeq (Piterbarg, Pinto and Fergus at NYU; ICLR 2025) is the odd one out, and I think it's on this list because it reaches a similar goal by a completely different route. People don't write programs top to bottom in one pass — they write a skeleton and grow it. Diffusion models capture that by refining a whole canvas. LintSeq keeps an ordinary AR model but changes its <em>training data</em>: instead of "instruction → full program", it trains on "instruction → a sequence of edits that builds the program". The authors say directly that they were inspired by discrete diffusion.</p>
+
+    <h3 class="sub">Where the edit sequences come from</h3>
+
+    <p>Real edit histories are scarce, so LintSeq generates synthetic ones from finished programs, in two phases:</p>
+
+    <p><strong>Backward sampling.</strong> Start from the finished program. Delete a random line. Run a <strong>linter</strong> — a static checker that flags errors like undefined variables. If the deletion broke other lines (say, you deleted <code>total = 0</code> and a later line uses <code>total</code>), delete those too, and repeat until the linter is clean. Keep going until the program is empty. Every intermediate program is error-free.</p>
+
+    <p><strong>Forward edits.</strong> Reverse the list — empty program first, finished program last — and express each step as a Unix-style diff. Every diff is insertions only. The model is fine-tuned to output these diffs one after another, separated by a special <code>&lt;|diff|&gt;</code> token. Applying them in order rebuilds the program.</p>
+
+    <!-- LAB 6 -->
+    <div class="lab" id="lab6">
+      <div class="lab-head">
+        <div class="lab-title"><span class="dot"></span> LintSeq lab — sampling an edit sequence</div>
+        <div class="lab-sub">a simplified linter that tracks definitions and blocks</div>
+      </div>
+      <div class="lab-btns" id="l6Mode"></div>
+      <div class="lab-btns"><button class="lab-btn on" id="l6Sample">Sample a new sequence</button></div>
+      <div class="two-col">
+        <div>
+          <div class="panel-h">Backward: deletions (click a state)</div>
+          <div class="states" id="l6States"></div>
+          <div class="codepane" id="l6Back"></div>
+        </div>
+        <div>
+          <div class="panel-h">Forward: what the model is trained to write</div>
+          <div class="codepane" id="l6Fwd"></div>
+        </div>
+      </div>
+      <div class="lab-info active" id="l6Info"></div>
+    </div>
+
+    <h3 class="sub">What it achieved</h3>
+
+    <p>The authors pre-trained tiny code models from scratch (150M and 400M parameters) and fine-tuned them on the same instruction data, once as full programs and once as LintSeq edit sequences. For the 150M model, HumanEval pass@1 went from 9.1% to 12.8%, roughly matching code models twice its size, such as Codex-300M. On larger general models (Gemma 2, Phi-3, Llama 3.1; 2.6B–14B), pass@1 stayed level or improved slightly, but pass@k at larger k improved a lot. Phi-3-Mini's HumanEval pass@50 rose from 62.2% to 87.3%. The theme is the same as CodeFusion's: more diverse samples, so repeated sampling pays off more per unit of compute.</p>
+
+    <p>The linter matters. Replacing linter-guided deletion with random deletion ("RandSeq") cut pass@1 by 24–30% and produced far more broken code — the same lesson as TreeDiff: corrupting along the program's real structure teaches more than corrupting at random.</p>
+
+    <!-- ================= 08 ================= -->
+    <div class="section-header">
+      <span class="section-number">08</span>
+      <span class="section-title">Putting it together</span>
+      <span class="section-rule"></span>
+    </div>
+
+    <div class="table-wrap"><table>
+      <thead><tr><th>Paper</th><th>What "noise" is</th><th>What changes vs a normal model</th><th>Main result</th><th>Main caveat</th></tr></thead>
+      <tbody>
+        <tr><td class="metric-name">CodeFusion 2023</td><td>Gaussian noise on embeddings</td><td>New architecture; decoder sees all positions before choosing tokens</td><td>75M model on par at top-1, ahead at top-3/5 on short tasks</td><td>Similarity metric for Python; few-shot giants; short programs; preprint withdrawn</td></tr>
+        <tr><td class="metric-name">DiffuCoder 2025</td><td>[MASK] tokens</td><td>AR model converted to masked diffusion; RL with complementary masks</td><td>On par with its 7B AR parent at base; +4.4 EvalPlus from coupled-GRPO</td><td>Instruction tuning helps it less than AR</td></tr>
+        <tr><td class="metric-name">TreeDiff 2025</td><td>[MASK] tokens, in AST-subtree spans</td><td>Only the training corruption</td><td>+1–3 points over random masking (+4–7 over the untuned model) on LLaDA-8B</td><td>Small benchmarks, one model, workshop paper</td></tr>
+        <tr><td class="metric-name">LintSeq 2025</td><td>None — it's not diffusion</td><td>Only the training data: programs become linter-clean insertion edits</td><td>Big pass@k gains at equal compute</td><td>Insertions only; Python only</td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="lab">
+      <div class="lab-head">
+        <div class="lab-title"><span class="dot"></span> Three ways to write the same function</div>
+        <div class="lab-sub">AR, masked diffusion, edit sequence</div>
+      </div>
+      <div class="pipe-host">
+      <svg class="pipe" viewBox="0 0 700 250" role="img" aria-label="Comparison of autoregressive generation, masked diffusion and LintSeq edit sequences writing the same function">
+        <text class="s" x="80" y="20" style="fill:#6B8DAD;font-size:9.5px">AUTOREGRESSIVE</text>
+        <text class="s" x="80" y="34">one token, left → right</text>
+        <rect class="bx" x="10" y="45" width="140" height="190" stroke="#6B8DAD"/>
+        <text class="t" x="80" y="70" style="font-size:9.5px">def</text>
+        <text class="t" x="80" y="92" style="font-size:9.5px">def is_even</text>
+        <text class="t" x="80" y="114" style="font-size:9.5px">def is_even(n):</text>
+        <text class="t" x="80" y="136" style="font-size:9.5px">… return n</text>
+        <text class="t" x="80" y="158" style="font-size:9.5px">… return n % 2</text>
+        <text class="t" x="80" y="180" style="font-size:9.5px">… == 0</text>
+        <text class="s" x="80" y="215">never revisits a token</text>
+
+        <text class="s" x="320" y="20" style="fill:#C9A84C;font-size:9.5px">MASKED DIFFUSION</text>
+        <text class="s" x="320" y="34">whole canvas, many tokens per step</text>
+        <rect class="bx" x="180" y="45" width="280" height="190" stroke="#C9A84C"/>
+        <text class="t" x="320" y="70" style="font-size:9.5px;fill:rgba(200,200,212,0.5)">▢ ▢ ▢ ▢ ▢ ▢ ▢ ▢ ▢ ▢ ▢ ▢</text>
+        <text class="t" x="320" y="95" style="font-size:9.5px">def ▢ ( ▢ ) : return ▢ ▢ ▢ ▢ ▢</text>
+        <text class="t" x="320" y="120" style="font-size:9.5px">def is_even ( n ) : return ▢ ▢ ▢ == 0</text>
+        <text class="t" x="320" y="145" style="font-size:9.5px">def is_even ( n ) : return n % 2 == 0</text>
+        <text class="s" x="320" y="185">order chosen by confidence;</text>
+        <text class="s" x="320" y="200">CodeFusion is the continuous cousin</text>
+        <text class="s" x="320" y="215">(blurred vectors instead of ▢)</text>
+
+        <text class="s" x="590" y="20" style="fill:#5BA68A;font-size:9.5px">LINTSEQ</text>
+        <text class="s" x="590" y="34">AR model writing insertion diffs</text>
+        <rect class="bx" x="490" y="45" width="200" height="190" stroke="#5BA68A"/>
+        <text class="t" x="590" y="78" style="font-size:9.5px">+ def is_even(n):</text>
+        <text class="t" x="590" y="96" style="font-size:9.5px">+     r = n % 2</text>
+        <text class="s" x="590" y="122">&lt;|diff|&gt;</text>
+        <text class="t" x="590" y="148" style="font-size:9.5px">+     return r == 0</text>
+        <text class="s" x="590" y="200">every prefix of edits is a</text>
+        <text class="s" x="590" y="213">linter-clean program;</text>
+        <text class="s" x="590" y="226">edits are insertions only</text>
+      </svg>
+      </div>
+    </div>
+
+    <h3 class="sub">What I'd tell myself at the start</h3>
+
+    <p>Diffusion for code is real and competitive, but the story is more about <em>diversity and flexibility</em> than about beating AR models outright. CodeFusion's honest win is top-k on short tasks. DiffuCoder shows a 7B diffusion coder can match its AR parent, and that RL needs to be redesigned for it. Three threads run through all four papers. First, <strong>diversity</strong> is the recurring advantage, visible as top-k and pass@k gains. Second, <strong>order is a choice</strong>: diffusion models decide what to write first, and code is where they deviate most from left-to-right. Third, <strong>structure-respecting corruption beats random corruption</strong>, whether it's CodeFusion's identifier noise, TreeDiff's subtree spans or LintSeq's linter-guided deletions.</p>
+
+    <p>The costs are real too: a fixed-length canvas to fill, many network calls unless you commit several tokens per step (with the consistency risk the Section 03 lab shows), and harder likelihoods for RL. And, after my corrections, the claim I'd now defend is narrower than the one I started with: structure-aware <em>training noise</em> helps. Whether these models build structure before content is still an open question, not a finding.</p>
+
+    <h3 class="sub">Test yourself</h3>
+    <div class="lab" id="lab7">
+      <div class="lab-head">
+        <div class="lab-title"><span class="dot"></span> Five questions</div>
+        <div class="lab-sub" id="l7Score">0 / 5</div>
+      </div>
+      <div id="l7Quiz"></div>
+    </div>
+
+    <h3 class="sub">References</h3>
+    <ul class="refs">
+      <li>Mukul Singh, José Cambronero, Sumit Gulwani, Vu Le, Carina Negreanu, Gust Verbruggen. <a href="https://aclanthology.org/2023.emnlp-main.716/" target="_blank">CodeFusion: A Pre-trained Diffusion Model for Code Generation</a>. EMNLP 2023. (arXiv preprint 2310.17680 withdrawn.)</li>
+      <li>Shansan Gong, Ruixiang Zhang, Huangjie Zheng, Jiatao Gu, Navdeep Jaitly, Lingpeng Kong, Yizhe Zhang. <a href="https://arxiv.org/abs/2506.20639" target="_blank">DiffuCoder: Understanding and Improving Masked Diffusion Models for Code Generation</a>. 2025. Code: <a href="https://github.com/apple/ml-diffucoder" target="_blank">apple/ml-diffucoder</a>.</li>
+      <li>Yiming Zeng et al. <a href="https://arxiv.org/abs/2508.01473" target="_blank">TreeDiff: AST-Guided Code Generation with Diffusion LLMs</a>. arXiv 2025; SURGeLLM workshop, ACL 2026.</li>
+      <li>Ulyana Piterbarg, Lerrel Pinto, Rob Fergus. <a href="https://arxiv.org/abs/2410.02749" target="_blank">Training Language Models on Synthetic Edit Sequences Improves Code Synthesis</a>. ICLR 2025. Project: <a href="https://lintseq.github.io/" target="_blank">lintseq.github.io</a>.</li>
+      <li>Background: Ho, Jain, Abbeel. Denoising Diffusion Probabilistic Models (2020) · Austin et al. Structured Denoising Diffusion Models in Discrete State-Spaces (2021) · Nie et al. LLaDA (2025) · Shao et al. DeepSeekMath / GRPO (2024).</li>
+    </ul>
+
+    <div class="series-nav" style="margin-top:2rem">
+      <a href="index.html">← All writing</a>
+      <a href="grammar-constrained-decoding.html">Related: Making every token parse →</a>
+    </div>
+
+  </article>
+</div>
+
+<footer>
+  <div class="footer-inner">
+    <div class="footer-left">Let's <span>connect</span>.</div>
+    <div class="footer-links">
+      <a href="mailto:vanmaliaakash5@gmail.com">Email</a>
+      <a href="https://github.com/aakashvanmali45" target="_blank">GitHub</a>
+      <a href="https://linkedin.com/in/aakashvanmali" target="_blank">LinkedIn</a>
+    </div>
+  </div>
+  <div class="footer-note">© 2026 Aakash Vanmali · Study notes on diffusion code models, built up one stage at a time</div>
+</footer>
+
+<script>
+(function(){
+'use strict';
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const $ = id => document.getElementById(id);
+let seed = 11;
+function rnd(){ seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
+function btnGroup(host, items, onPick, initial){
+  host.innerHTML = '';
+  const bs = items.map((it, i) => {
+    const b = document.createElement('button'); b.className = 'lab-btn' + (i === initial ? ' on' : ''); b.textContent = it;
+    b.addEventListener('click', () => { bs.forEach(x => x.classList.toggle('on', x === b)); onPick(i); });
+    host.appendChild(b); return b;
+  });
+  return bs;
+}
+const shuffle = a => { const b = a.slice(); for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
+
+/* ============ LAB 1: noise ============ */
+(function(){
+  const toks = ['def', 'is_even', '(', 'n', '):', 'return', 'n', '%', '2', '==', '0'];
+  const pool = ['for', 'x', '[', ']', 'print', 'if', '1', '+', 'self', ':', 'None', 'lambda', 'in', 'len', '='];
+  let u1, u2, alt;
+  const roll = () => { u1 = toks.map(() => rnd()); u2 = toks.map(() => rnd()); alt = toks.map(() => pool[Math.floor(rnd() * pool.length)]); };
+  roll();
+  function paint(){
+    const t = +$('l1Slider').value / 100; $('l1T').textContent = t.toFixed(2);
+    const pWrong = Math.pow(t, 1.4);
+    let wrong = 0, masked = 0;
+    $('l1Cont').innerHTML = toks.map((x, i) => { const w = u1[i] < pWrong; if (w) wrong++; return `<span class="tk${w ? ' g' : ''}">${esc(w ? alt[i] : x)}</span>`; }).join('');
+    $('l1Mask').innerHTML = toks.map((x, i) => { const m = u2[i] < t; if (m) masked++; return `<span class="tk${m ? ' m' : ''}">${m ? '▢' : esc(x)}</span>`; }).join('');
+    $('l1Info').innerHTML = t === 0 ? 'At t = 0 the program is clean. Drag right to run the forward process.'
+      : t >= 1 ? 'At t = 1 nothing of the program survives: random tokens on the left, all [MASK] on the right. Generation starts here and runs the learned reverse process back to t = 0.'
+      : `At t = ${t.toFixed(2)}: <strong>${wrong}</strong> of ${toks.length} tokens read back wrong from the noisy vectors, and <strong>${masked}</strong> are masked. A denoiser is trained on examples like these, at every noise level, to recover the original.`;
+  }
+  $('l1Slider').addEventListener('input', paint);
+  $('l1Re').addEventListener('click', () => { roll(); paint(); });
+  paint();
+})();
+
+/* ============ LAB 2: unmasking order ============ */
+(function(){
+  const T = ['def', 'is_even', '(', 'n', '):', 'return', 'n', '%', '2', '==', '0'];
+  const ALT = { 6: 'x', 10: '1' };
+  const DEP = { 6: [3], 10: [1] };
+  const BASE = [0.95, 0.40, 0.85, 0.45, 0.80, 0.75, 0.35, 0.55, 0.50, 0.60, 0.30];
+  let strat = 0, K = 1, state, randOrder;
+  btnGroup($('l2Strat'), ['Confidence (low-confidence remasking)', 'Left-to-right', 'Random order'], i => { strat = i; reset(); }, 0);
+  function reset(){ state = { step: 0, when: T.map(() => null), tok: T.map(() => null), events: [] }; randOrder = shuffle(T.map((_, i) => i)); paint(); }
+  function conf(i){
+    let c = BASE[i];
+    if (i === 0 || state.when[i - 1] != null) c += 0.25;
+    if (DEP[i]) c = DEP[i].every(d => state.when[d] != null) ? c + 0.45 : c * 0.5;
+    return c;
+  }
+  function step(){
+    const masked = T.map((_, i) => i).filter(i => state.when[i] == null);
+    if (!masked.length) return;
+    let pick;
+    if (strat === 0) pick = masked.slice().sort((a, b) => conf(b) - conf(a)).slice(0, K);
+    else if (strat === 1) pick = masked.slice(0, K);
+    else pick = randOrder.filter(i => state.when[i] == null).slice(0, K);
+    state.step++;
+    pick.sort((a, b) => a - b).forEach(i => {
+      const ok = !DEP[i] || DEP[i].every(d => state.when[d] != null && state.when[d] < state.step);
+      state.when[i] = state.step; state.tok[i] = ok ? T[i] : ALT[i];
+      state.events.push(i);
+    });
+    paint(pick);
+  }
+  function metrics(){
+    let loc = 0, glob = 0; const seen = new Set(); let prev = -1;
+    state.events.forEach(p => {
+      if (p === prev + 1) loc++;
+      const leftmost = T.map((_, i) => i).find(i => !seen.has(i));
+      if (p === leftmost) glob++;
+      seen.add(p); prev = p;
+    });
+    const n = state.events.length || 1;
+    return [loc / n, glob / n];
+  }
+  function paint(fresh = []){
+    $('l2Canvas').innerHTML = T.map((x, i) => {
+      if (state.when[i] == null) return '<span class="tk m">▢</span>';
+      const bad = state.tok[i] !== T[i];
+      return `<span class="tk${fresh.includes(i) ? ' new' : ''}${bad ? ' bad' : ''}">${esc(state.tok[i])}</span>`;
+    }).join(' ');
+    $('l2Order').innerHTML = T.map((x, i) => `<span class="o" title="${esc(x)}">${state.when[i] == null ? '·' : state.when[i]}</span>`).join('');
+    const done = state.when.every(w => w != null);
+    const bad = T.some((x, i) => state.tok[i] != null && state.tok[i] !== x);
+    const [loc, glob] = metrics();
+    $('l2Meters').innerHTML = `<div class="mnum">${state.step}<small>network calls</small></div><div class="mnum soft">${loc.toFixed(2)}<small>local AR-ness@1</small></div><div class="mnum soft">${glob.toFixed(2)}<small>global AR-ness@1</small></div>` +
+      `<div style="align-self:center">${done ? (bad ? '<span class="badge bad">inconsistent program</span>' : '<span class="badge ok">correct program</span>') : '<span class="badge run">decoding…</span>'}</div>`;
+    $('l2Count').textContent = `${state.events.length} / ${T.length} tokens`;
+    const names = ['Confidence', 'Left-to-right', 'Random'];
+    let msg;
+    if (!state.step) msg = `Every position starts as [MASK]. Strategy: <strong>${names[strat]}</strong>, committing <strong>${K}</strong> token${K > 1 ? 's' : ''} per network call.`;
+    else if (!done) msg = fresh.length ? `Step ${state.step} committed: ${fresh.map(i => `<code>${esc(state.tok[i])}</code> (position ${i})`).join(', ')}.` : '';
+    else if (bad) msg = `Done in ${state.step} calls — but inconsistent. ${state.tok[6] !== T[6] ? 'The body\'s variable became <code>x</code> because it was committed before (or together with) the parameter <code>n</code>. ' : ''}${state.tok[10] !== T[10] ? 'The comparison became <code>== 1</code> (an is_odd!) because it was written before the function name was known. ' : ''}Tokens committed in the same step are predicted independently of each other.`;
+    else msg = `Done in ${state.step} calls with a consistent program. ${K === 1 ? 'One token per call costs as many calls as an AR model.' : 'Fewer calls than an AR model — this time the dependent tokens happened not to collide.'}`;
+    $('l2Info').innerHTML = msg;
+  }
+  const kIn = $('l2K');
+  kIn.addEventListener('input', () => { K = +kIn.value; $('l2KV').textContent = K; reset(); });
+  $('l2Step').addEventListener('click', step);
+  $('l2Run').addEventListener('click', () => { let n = 0; while (state.when.some(w => w == null) && n++ < 20) step(); });
+  $('l2Reset').addEventListener('click', reset);
+  reset();
+})();
+
+/* ============ LAB 3: top-k diversity ============ */
+(function(){
+  const SRC = [
+    { name: 'AR beam search', c: [["os.rmdir('build')", 0], ["os.rmdir(\"build\")", 0], ["os.rmdir('build/')", 0], ["os.rmdir('./build')", 0], ["os.removedirs('build')", 0]] },
+    { name: 'Diffusion samples', c: [["os.removedirs('build')", 0], ["shutil.rmtree('build')", 1], ["os.rmdir('build')", 0], ["subprocess.run(['rm', '-rf', 'build'])", 1], ["os.remove('build')", 0]] }
+  ];
+  let src = 0, k = 1;
+  btnGroup($('l3Src'), SRC.map(s => s.name), i => { src = i; paint(); }, 0);
+  const toks = s => s.match(/\w+|[^\s\w]/g) || [];
+  function distinct2(list){
+    let total = 0; const set = new Set();
+    list.forEach(s => { const t = toks(s); for (let i = 0; i + 1 < t.length; i++) { set.add(t[i] + ' ' + t[i + 1]); total++; } });
+    return total ? set.size / total : 0;
+  }
+  function paint(){
+    const S = SRC[src];
+    $('l3List').innerHTML = S.c.map(([code, ok], i) => `<div class="cand ${ok ? 'pass' : 'fail'}${i >= k ? ' out' : ''}"><span class="r">${i + 1}</span><span>${esc(code)}</span><span class="res">${ok ? '✓ passes' : '✗ fails'}</span></div>`).join('');
+    const shown = S.c.slice(0, k);
+    const pass = shown.some(([, ok]) => ok);
+    $('l3Meters').innerHTML = `<div class="mnum ${pass ? '' : 'soft'}">${pass ? 'yes' : 'no'}<small>correct in top-${k}?</small></div><div class="mnum soft">${distinct2(shown.map(x => x[0])).toFixed(2)}<small>distinct 2-gram ratio</small></div>`;
+    $('l3Info').innerHTML = (src === 0
+      ? 'Beam search keeps the five highest-scoring sequences, and they tend to share almost everything: here all five are variations of <code>os.rmdir</code>, which only removes <em>empty</em> folders. Showing more candidates barely helps.'
+      : 'Diffusion samples start from different noise, so they wander further apart. The first suggestion is still wrong (CodeFusion\'s own failure example involved <code>os.removedirs</code>), but a correct one appears at rank 2.') +
+      `<br><span style="opacity:.7">Candidates are illustrative, not from the paper. The distinct 2-gram ratio is one of CodeFusion's diversity measures: unique adjacent token pairs ÷ all pairs across the shown candidates.</span>`;
+    $('l3KV').textContent = k;
+  }
+  $('l3K').addEventListener('input', () => { k = +$('l3K').value; paint(); });
+  paint();
+})();
+
+/* ============ LAB 4: coupled masks ============ */
+(function(){
+  const toks = ['def', 'is_even', '(', 'n', ')', ':', 'return', 'n', '%', '2', '==', '0'];
+  let mode = 1, A, B;
+  btnGroup($('l4Mode'), ['Two independent masks', 'Coupled (complementary) masks'], i => { mode = i; roll(); }, 1);
+  function roll(){
+    const t = +$('l4T').value / 100;
+    A = toks.map(() => rnd() < t);
+    B = mode ? A.map(x => !x) : toks.map(() => rnd() < 1 - t);
+    paint();
+  }
+  function paint(){
+    const t = +$('l4T').value / 100; $('l4TV').textContent = t.toFixed(2);
+    $('l4A').innerHTML = toks.map((x, i) => `<span class="cell${A[i] ? ' mk' : ''}">${A[i] ? '▢' : esc(x)}</span>`).join('');
+    $('l4B').innerHTML = toks.map((x, i) => `<span class="cell${B[i] ? ' mk' : ''}">${B[i] ? '▢' : esc(x)}</span>`).join('');
+    const c = toks.map((_, i) => (A[i] ? 1 : 0) + (B[i] ? 1 : 0));
+    $('l4C').innerHTML = c.map(n => `<span class="cell c${n}">${n}×</span>`).join('');
+    const z = c.filter(n => n === 0).length, one = c.filter(n => n === 1).length, two = c.filter(n => n === 2).length;
+    $('l4Meters').innerHTML = `<div class="mnum soft">${z}<small>never scored</small></div><div class="mnum">${one}<small>scored once</small></div><div class="mnum soft">${two}<small>scored twice</small></div>`;
+    $('l4Info').innerHTML = mode
+      ? 'Each pass hides the tokens the other one shows. A token is scored (its log-probability estimated) only where it is masked, so with complementary masks every token is scored exactly once — and always with part of its context visible, which is closer to how the model actually decodes.'
+      : `Two independent random masks: some tokens are never scored, so they get no learning signal from this example, while others are counted twice. Resample a few times — this randomness is exactly the variance coupled-GRPO removes.`;
+  }
+  $('l4T').addEventListener('input', roll);
+  $('l4Re').addEventListener('click', roll);
+  roll();
+})();
+
+/* ============ LAB 5: TreeDiff masking ============ */
+(function(){
+  const T = [
+    ['def', 0, 'o'], ['count_pos', 0, 'o'], ['(', 0, 'o'], ['xs', 0, 'o'], [')', 0, 'o'], [':', 0, 'o'],
+    ['total', 1, 'a'], ['=', 1, 'a'], ['0', 1, 'a'],
+    ['for', 1, 'c'], ['x', 1, 'c'], ['in', 1, 'c'], ['xs', 1, 'c'], [':', 1, 'c'],
+    ['if', 2, 'i'], ['x', 2, 'i'], ['>', 2, 'i'], ['0', 2, 'i'], [':', 2, 'i'],
+    ['total', 3, 'a'], ['+=', 3, 'a'], ['1', 3, 'a'],
+    ['return', 1, 'c'], ['total', 1, 'c']
+  ];
+  const LINE_START = [0, 6, 9, 14, 19, 22];
+  const SPANS = [ { n: 'assignment', s: 6, e: 9 }, { n: 'for loop', s: 9, e: 22 }, { n: 'if block', s: 14, e: 22 }, { n: 'comparison', s: 15, e: 18 }, { n: 'augmented assignment', s: 19, e: 22 }, { n: 'return', s: 22, e: 24 }, { n: 'parameters', s: 2, e: 5 } ];
+  const W = { o: 0.15, a: 0.42, i: 0.58, c: 0.60 };
+  let strat = 2, mask = [];
+  btnGroup($('l5Strat'), ['Random tokens', 'Weighted by node type', 'AST spans (TreeDiff)'], i => { strat = i; roll(); }, 2);
+  function roll(){
+    const eps = +$('l5E').value / 100, L = T.length, N = Math.floor(eps * L);
+    mask = T.map(() => false);
+    if (strat === 0) T.forEach((_, i) => { mask[i] = rnd() < eps; });
+    else if (strat === 1) {
+      const sw = T.reduce((a, t) => a + W[t[2]], 0);
+      T.forEach((t, i) => { mask[i] = rnd() < Math.min(1, W[t[2]] * eps * L / sw); });
+    } else {
+      let c = 0;
+      for (const sp of shuffle(SPANS)) {
+        const l = sp.e - sp.s, p = 1 - Math.pow(1 - eps, l);
+        let free = true; for (let i = sp.s; i < sp.e; i++) if (mask[i]) free = false;
+        if (c + l > Math.max(N, 2)) continue;   // toy-size adaptation: don't overshoot the budget
+        if (rnd() < p && free) { for (let i = sp.s; i < sp.e; i++) mask[i] = true; c += l; if (c >= N) break; }
+      }
+      if (c < N) { const un = shuffle(T.map((_, i) => i).filter(i => !mask[i])); un.slice(0, N - c).forEach(i => { mask[i] = true; }); }
+    }
+    paint();
+  }
+  function paint(){
+    const eps = +$('l5E').value / 100; $('l5EV').textContent = eps.toFixed(2);
+    let html = '';
+    T.forEach((t, i) => {
+      if (LINE_START.includes(i) && i > 0) html += '<span class="nl"></span>';
+      if (LINE_START.includes(i)) html += '<span class="ind"></span>'.repeat(t[1]);
+      html += `<span class="tk${mask[i] ? ' m' : ''}">${mask[i] ? '▢' : esc(t[0])}</span>`;
+    });
+    $('l5Canvas').innerHTML = html;
+    const m = mask.filter(Boolean).length;
+    let full = 0, frag = 0;
+    SPANS.forEach(sp => { let k = 0; for (let i = sp.s; i < sp.e; i++) if (mask[i]) k++; if (k === sp.e - sp.s) full++; else if (k > 0) frag++; });
+    $('l5Meters').innerHTML = `<div class="mnum soft">${(m / T.length).toFixed(2)}<small>fraction masked (target ${eps.toFixed(2)})</small></div><div class="mnum">${full}<small>syntactic units fully hidden</small></div><div class="mnum soft">${frag}<small>units cut in pieces</small></div>`;
+    const msgs = [
+      'Each token is masked independently with probability ε. Masks scatter across units: half a condition here, one argument there. The model mostly learns to patch small holes from nearby tokens.',
+      'TreeDiff\'s weighted baseline: control-flow tokens 0.60, conditionals 0.58, assignments and calls 0.42, the rest 0.15 (rescaled here to the same budget). It hides structure more often — but still token by token, so units are usually cut in pieces. In the paper this did <em>worse</em> than random masking on MBPP.',
+      'Whole AST subtrees are masked at once, each with probability 1 − (1 − ε)<sup>ℓ</sup>, skipping spans that overlap one already masked; any leftover budget is filled with random tokens. The model has to rebuild complete units — a whole condition, a whole statement. Two toy-size adaptations: I leave out the whole-function span, and skip spans that would overshoot the budget — in a 24-token program one loop is half the code, while on real files the paper\'s rule stays close to ε on average.'
+    ];
+    $('l5Info').innerHTML = msgs[strat];
+  }
+  $('l5E').addEventListener('input', roll);
+  $('l5Re').addEventListener('click', roll);
+  roll();
+})();
+
+/* ============ LAB 6: LintSeq ============ */
+(function(){
+  const LINES = [
+    { s: 'def mean_positive(xs):', ind: 0, def: ['mean_positive', 'xs'], use: [], parent: -1, header: true },
+    { s: 'total = 0', ind: 1, def: ['total'], use: [], parent: 0 },
+    { s: 'count = 0', ind: 1, def: ['count'], use: [], parent: 0 },
+    { s: 'for x in xs:', ind: 1, def: ['x'], use: ['xs'], parent: 0, header: true },
+    { s: 'if x > 0:', ind: 2, def: [], use: ['x'], parent: 3, header: true },
+    { s: 'total += x', ind: 3, def: [], use: ['total', 'x'], parent: 4 },
+    { s: 'count += 1', ind: 3, def: [], use: ['count'], parent: 4 },
+    { s: 'return total / count', ind: 1, def: [], use: ['total', 'count'], parent: 0 }
+  ];
+  const text = i => '    '.repeat(LINES[i].ind) + LINES[i].s;
+  function errors(present){
+    const set = new Set(present), errs = [];
+    present.forEach(i => {
+      const L = LINES[i];
+      if (L.parent >= 0 && !set.has(L.parent)) { errs.push(i); return; }
+      const defined = new Set(); present.filter(j => j < i).forEach(j => LINES[j].def.forEach(d => defined.add(d)));
+      if (L.use.some(u => !defined.has(u))) { errs.push(i); return; }
+      if (L.header && !present.some(j => LINES[j].parent === i)) errs.push(i);
+    });
+    return errs;
+  }
+  let mode = 0, states = [], sel = 0;
+  btnGroup($('l6Mode'), ['LintSeq (linter-guided)', 'RandSeq (no linter)'], i => { mode = i; sample(); }, 0);
+  function sample(){
+    let cur = LINES.map((_, i) => i);
+    states = [{ lines: cur.slice(), chosen: [], cascade: [] }];
+    let guard = 0;
+    while (cur.length && guard++ < 50) {
+      let chosen = [], cascade = [];
+      if (mode === 0) {
+        const pick = cur[Math.floor(rnd() * cur.length)];
+        chosen = [pick]; cur = cur.filter(i => i !== pick);
+        let e; while ((e = errors(cur)).length) { cascade.push(...e); cur = cur.filter(i => !e.includes(i)); }
+      } else {
+        const n = 1 + Math.floor(rnd() * Math.min(3, cur.length));
+        chosen = shuffle(cur).slice(0, n); cur = cur.filter(i => !chosen.includes(i));
+      }
+      states[states.length - 1].chosen = chosen; states[states.length - 1].cascade = cascade;
+      states.push({ lines: cur.slice(), chosen: [], cascade: [] });
+    }
+    sel = 0; paint();
+  }
+  function paint(){
+    const sh = $('l6States'); sh.innerHTML = '';
+    states.forEach((st, k) => {
+      const b = document.createElement('button');
+      const hasErr = errors(st.lines).length > 0;
+      b.className = (k === sel ? 'on' : '') + (hasErr ? ' err' : '');
+      b.textContent = k === 0 ? 'full' : k === states.length - 1 ? 'empty' : `state ${k}`;
+      b.addEventListener('click', () => { sel = k; paint(); });
+      sh.appendChild(b);
+    });
+    const st = states[sel], errs = errors(st.lines);
+    $('l6Back').innerHTML = st.lines.length ? st.lines.map(i => {
+      const cls = st.chosen.includes(i) ? 'del' : st.cascade.includes(i) ? 'cas' : errs.includes(i) ? 'err' : '';
+      return `<div class="${cls}"><span class="ln">${i + 1}</span>${esc(text(i))}</div>`;
+    }).join('') : '<div class="empty">(empty program)</div>';
+    // forward diffs
+    const fwd = states.slice().reverse();
+    let out = '', anyErr = false;
+    for (let k = 1; k < fwd.length; k++) {
+      const prev = new Set(fwd[k - 1].lines), added = fwd[k].lines.filter(i => !prev.has(i));
+      if (errors(fwd[k].lines).length) anyErr = true;
+      out += `<div style="color:rgba(200,200,212,0.4)">${k === 1 ? '' : '&lt;|diff|&gt;'} @@ +${added.length} line${added.length > 1 ? 's' : ''} @@</div>` +
+        added.map(i => `<div class="add">+ ${esc(text(i))}</div>`).join('');
+    }
+    $('l6Fwd').innerHTML = out;
+    const nEdits = states.length - 1;
+    $('l6Info').innerHTML = (mode === 0
+      ? `Backward: amber lines are the random deletion; faded amber lines were removed because the linter flagged them afterwards (an undefined name, an orphaned body line, or an empty block). Every state is linter-clean. Reversed, that gives <strong>${nEdits}</strong> insertion edits.`
+      : `RandSeq deletes random lines with no linter. Some intermediate states now contain errors (marked), so the model would be trained on broken partial programs. In the paper, this cut pass@1 by 24–30%.`) +
+      (mode === 1 && anyErr ? ' This sample has at least one broken state — click the amber-bordered states.' : '') +
+      ' <span style="opacity:.7">The linter here is a simplified stand-in for pylint: it checks definitions, indentation parents and empty blocks.</span>';
+  }
+  $('l6Sample').addEventListener('click', sample);
+  sample();
+})();
+
+/* ============ LAB 7: quiz ============ */
+(function(){
+  const Q = [
+    { q: 'In a masked diffusion model, what is the generation order?', o: ['Always left to right, like an AR model', 'Chosen at decoding time, e.g. by committing the most confident positions first', 'Fixed by the AST'], a: 1, e: 'Order is a decoding choice. Low-confidence remasking commits the most confident positions each step, which in practice is fairly — but not fully — left-to-right.' },
+    { q: 'Why did CodeFusion add a decoder after the denoiser?', o: ['To make the model bigger', 'Rounding each denoised position to its nearest token independently produced invalid code; the decoder chooses tokens with all positions in view', 'To support beam search'], a: 1, e: 'Independent rounding was the weak spot of earlier text diffusion models. The decoder raised syntactic validity sharply over GENIE and Diffusion-LM.' },
+    { q: 'What does TreeDiff change?', o: ['The order in which structure is generated', 'The training corruption: whole AST subtrees are masked instead of scattered tokens', 'The model architecture'], a: 1, e: 'Only the training masks change, with span probabilities chosen to keep the same expected masking budget. Generation is ordinary masked diffusion.' },
+    { q: 'Why does RL on a diffusion model need coupled-GRPO\'s trick?', o: ['Diffusion models cannot produce rewards', 'There\'s no chain rule for a sequence\'s log-probability, so it must be estimated by masking — and random masks leave some tokens unscored', 'GRPO only works with images'], a: 1, e: 'Complementary masks score every token exactly once across two passes, reducing the variance of the estimate.' },
+    { q: 'Is LintSeq a diffusion model?', o: ['Yes, a discrete one', 'No — it trains an ordinary AR model on linter-clean insertion edits, borrowing the build-it-up-in-passes idea'], a: 1, e: 'LintSeq changes the training data, not the model. The authors cite discrete diffusion as inspiration.' }
+  ];
+  const host = $('l7Quiz'); let right = 0; const done = new Set();
+  host.innerHTML = Q.map((x, i) => `<div class="quiz-q"><div class="qt">${i + 1}. ${esc(x.q)}</div><div class="opts">${x.o.map((o, j) => `<button class="opt" data-q="${i}" data-j="${j}">${esc(o)}</button>`).join('')}</div><div class="fb" id="q7fb${i}"></div></div>`).join('');
+  host.querySelectorAll('.opt').forEach(b => b.addEventListener('click', () => {
+    const i = +b.dataset.q, j = +b.dataset.j; if (done.has(i)) return; done.add(i);
+    const ok = j === Q[i].a; if (ok) right++;
+    host.querySelectorAll(`.opt[data-q="${i}"]`).forEach(o => { const k = +o.dataset.j; if (k === Q[i].a) o.classList.add('right'); else if (k === j) o.classList.add('wrong'); });
+    $('q7fb' + i).innerHTML = `<strong>${ok ? 'Right.' : 'Not quite.'}</strong> ${esc(Q[i].e)}`;
+    $('l7Score').textContent = `${right} / ${Q.length}` + (done.size === Q.length ? ' — done' : '');
+  }));
+})();
+})();
+</script>
+</body>
+</html>
