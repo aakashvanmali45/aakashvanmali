@@ -3,9 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Aakash Vanmali — AI &amp; Computer Vision Researcher</title>
-  <meta name="description" content="Aakash Vanmali — Research in VLMs, zero-shot visual understanding, and vision-language-action models. Seeking PhD positions in Europe.">
-  
+  <title>Aakash Vanmali — AI &amp; Computer Vision Engineer</title>
+  <meta name="description" content="Aakash Vanmali — AI &amp; Computer Vision Engineer. Vision-language models for industrial problems where labelled data is scarce and accuracy is critical. Open to industry and research roles across Europe & the Nordics.">
+
+  <!-- Open Graph / social preview -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://aakashvanmali.netlify.app/">
+  <meta property="og:title" content="Aakash Vanmali — AI &amp; Computer Vision Engineer">
+  <meta property="og:description" content="Vision-language models applied to industrial problems where labelled data is scarce and accuracy is critical. Ex-ABB. Open to industry & research roles across Europe & the Nordics.">
+  <meta property="og:image" content="https://aakashvanmali.netlify.app/og-image.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Aakash Vanmali — AI &amp; Computer Vision Engineer">
+  <meta name="twitter:description" content="Vision-language models applied to industrial problems where labelled data is scarce and accuracy is critical. Ex-ABB. Open to industry & research roles across Europe & the Nordics.">
+  <meta name="twitter:image" content="https://aakashvanmali.netlify.app/og-image.jpg">
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -151,10 +162,10 @@
     }
     .hero-links svg { width: 14px; height: 14px; flex-shrink: 0; }
 
-    /* Epigraph — fades in after the dots connect */
+    /* Mission line — fades in after the dots connect */
     .hero-quote {
       margin-top: 2.4rem;
-      max-width: 440px;
+      max-width: 480px;
       opacity: 0;
       transition: opacity 1.6s var(--ease);
     }
@@ -169,16 +180,6 @@
       position: relative;
       padding-left: 1rem;
       border-left: 1px solid rgba(201, 168, 76, 0.3);
-    }
-    .hero-quote span {
-      display: block;
-      font-family: var(--mono);
-      font-size: 0.6rem;
-      letter-spacing: 0.16em;
-      text-transform: uppercase;
-      color: rgba(200, 200, 212, 0.45);
-      margin-top: 0.6rem;
-      padding-left: 1rem;
     }
     .scroll-hint {
       position: absolute;
@@ -281,6 +282,13 @@
       flex: 1; height: 1px;
       background: var(--border-paper);
     }
+    .section-intro {
+      font-size: 0.9rem;
+      line-height: 1.7;
+      color: var(--text-mid);
+      margin-bottom: 1.6rem;
+      margin-top: -0.6rem;
+    }
     .reveal {
       opacity: 0;
       transform: translateY(24px);
@@ -297,7 +305,7 @@
       display: flex;
       align-items: center;
       gap: 1rem;
-      margin-bottom: 3rem;
+      margin-bottom: 1.5rem;
       position: relative;
       overflow: hidden;
     }
@@ -321,6 +329,44 @@
     }
     .seeking-banner p { font-size: 0.88rem; font-weight: 400; }
     .seeking-banner strong { color: var(--gold); font-weight: 600; }
+
+    /* ---- STATS STRIP ---- */
+    .stats-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.8rem;
+      margin-bottom: 3rem;
+    }
+    .stat-card {
+      background: var(--paper-white);
+      border: 1px solid var(--border-paper);
+      border-top: 2px solid var(--gold);
+      padding: 1.1rem 0.9rem;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+    .stat-num {
+      font-family: var(--serif);
+      font-size: 1.9rem;
+      font-weight: 600;
+      color: var(--ink);
+      line-height: 1;
+    }
+    .stat-label {
+      font-size: 0.7rem;
+      line-height: 1.4;
+      color: var(--text-mid);
+    }
+    .stats-note {
+      font-family: var(--mono);
+      font-size: 0.62rem;
+      letter-spacing: 0.04em;
+      color: var(--text-light);
+      text-align: center;
+      margin: -2.2rem 0 3rem;
+    }
 
     /* ---- NEWS ---- */
     .news-item {
@@ -399,6 +445,27 @@
     .exp-dates { font-family: var(--mono); font-size: 0.72rem; color: var(--text-light); }
     .exp-org { font-size: 0.85rem; color: var(--text-mid); margin-bottom: 0.5rem; }
     .exp-desc { font-size: 0.85rem; line-height: 1.75; color: var(--text-mid); }
+    .exp-list { list-style: none; margin: 0.3rem 0 0; }
+    .exp-list li {
+      position: relative;
+      padding-left: 1.1rem;
+      margin-bottom: 0.45rem;
+      font-size: 0.85rem;
+      line-height: 1.7;
+      color: var(--text-mid);
+    }
+    .exp-list li::before {
+      content: '▸';
+      position: absolute;
+      left: 0;
+      color: var(--gold);
+    }
+    .exp-note {
+      font-size: 0.78rem;
+      font-style: italic;
+      color: var(--text-light);
+      margin-top: 0.5rem;
+    }
 
     /* ---- PROJECTS ---- */
     .projects-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
@@ -415,6 +482,14 @@
       box-shadow: 0 6px 24px rgba(0,0,0,0.06);
       transform: translateY(-3px);
     }
+    .proj-flag {
+      font-family: var(--mono);
+      font-size: 0.58rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 0.5rem;
+    }
     .proj-name { font-family: var(--serif); font-weight: 600; font-size: 1rem; line-height: 1.35; margin-bottom: 0.4rem; }
     .proj-name a { color: var(--text-dark); text-decoration: none; }
     .proj-name a:hover { color: var(--gold); }
@@ -423,8 +498,36 @@
     .proj-arrow { position: absolute; top: 1.2rem; right: 1.2rem; font-size: 0.85rem; color: var(--border-paper); transition: all 0.2s; }
     .proj-card:hover .proj-arrow { color: var(--gold); transform: translate(2px, -2px); }
 
+    /* ---- OTHER PROJECTS (collapsed) ---- */
+    .other-projects { margin-top: 1rem; }
+    .other-projects > summary {
+      list-style: none;
+      cursor: pointer;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-light);
+      padding: 0.6rem 0;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: color 0.2s;
+    }
+    .other-projects > summary:hover { color: var(--gold); }
+    .other-projects > summary::-webkit-details-marker { display: none; }
+    .other-projects > summary::before {
+      content: '+';
+      font-size: 0.95rem;
+      color: var(--gold);
+      transition: transform 0.2s;
+    }
+    .other-projects[open] > summary::before { content: '–'; }
+    .other-projects .projects-grid { margin-top: 1rem; }
+
     /* ---- EDUCATION ---- */
-    .edu-block { display: flex; gap: 1.2rem; align-items: flex-start; }
+    .edu-block { display: flex; gap: 1.2rem; align-items: flex-start; margin-bottom: 1.6rem; }
+    .edu-block:last-child { margin-bottom: 0; }
     .edu-marker {
       width: 40px; height: 40px;
       background: var(--ink);
@@ -464,6 +567,7 @@
       .hero h1 { font-size: 2.8rem; }
       .hero-tagline { font-size: 1.2rem; }
       .projects-grid { grid-template-columns: 1fr; }
+      .stats-strip { grid-template-columns: 1fr 1fr; }
       .content { padding: 0 1.2rem; }
       .sticky-nav-inner { padding: 0.7rem 1.2rem; }
       .sticky-nav-links { gap: 1rem; }
@@ -489,7 +593,7 @@
     <div class="sticky-nav-inner">
       <a href="#" class="sticky-nav-name">Aakash Vanmali</a>
       <div class="sticky-nav-links">
-        <a href="#research">Research</a>
+        <a href="#research">Focus</a>
         <a href="#experience">Experience</a>
         <a href="#projects">Projects</a>
         <a href="blog/index.html">Writing</a>
@@ -500,12 +604,12 @@
   <section class="hero">
     <canvas class="hero-canvas" id="clusterCanvas"></canvas>
     <div class="hero-content">
-      <div class="hero-eyebrow">AI &amp; Computer Vision Research</div>
+      <div class="hero-eyebrow">AI &amp; Computer Vision Engineer</div>
       <h1>Aakash<br>Vanmali</h1>
-      <p class="hero-tagline">Building intelligent perception for the real world</p>
+      <p class="hero-tagline">Putting vision-language models to work on industrial problems</p>
       <p class="hero-affiliation">
         M.Eng. Mechatronics &amp; Cyber-Physical Systems · Technische Hochschule Deggendorf<br>
-        Master's Thesis at ABB AG, Mannheim
+        Previously AI &amp; Computer Vision at ABB AG, Mannheim
       </p>
       <div class="hero-links">
         <a href="mailto:vanmaliaakash5@gmail.com">
@@ -522,8 +626,7 @@
         </a>
       </div>
       <div class="hero-quote" id="heroQuote">
-        <p>"You can't connect the dots looking forward; you can only connect them looking backwards."</p>
-        <span>— Steve Jobs</span>
+        <p>Solving industrial problems where labelled data is scarce and the accuracy bar is high — with the latest in vision-language AI.</p>
       </div>
     </div>
     <div class="scroll-hint">
@@ -536,7 +639,7 @@
 
     <div class="seeking-banner reveal" style="margin-top: 3rem;">
       <span class="seeking-icon"></span>
-      <p><strong>Seeking fulltime opportunities</strong> in AI, Computer Vision, and Robotics across Europe and the Nordics.</p>
+      <p><strong>Open to industry &amp; research roles</strong> in AI, Computer Vision, and Robotics across Europe and the Nordics.</p>
     </div>
 
     <section class="reveal">
@@ -546,57 +649,72 @@
         <span class="section-rule"></span>
       </div>
       <div class="news-item">
+        <span class="news-date">Sep 2026</span>
+        <span class="news-text">Graduated M.Eng. Mechatronics &amp; Cyber-Physical Systems, Technische Hochschule Deggendorf.</span>
+      </div>
+      <div class="news-item">
         <span class="news-date">Jul 2026</span>
-        <span class="news-text">Completed master's thesis at ABB AG on clustering-based approaches for industrial document digitisation.</span>
+        <span class="news-text">Completed master's thesis at ABB AG on clustering-based approaches for industrial document digitisation (grade 1.0).</span>
       </div>
       <div class="news-item">
         <span class="news-date">2026</span>
-        <span class="news-text">Actively seeking PhD positions in AI, Computer Vision, and Robotics across Europe and the Nordics.</span>
+        <span class="news-text">Open to industry and research roles in AI, Computer Vision, and Robotics across Europe and the Nordics.</span>
       </div>
     </section>
 
     <section id="research" class="reveal">
       <div class="section-header">
         <span class="section-number">02</span>
-        <span class="section-title">Research Interests</span>
+        <span class="section-title">Focus</span>
         <span class="section-rule"></span>
       </div>
       <p class="research-statement">
-        I am interested in developing <strong>Vision-Language Models (VLMs)</strong> and <strong>Vision-Language-Action (VLA) systems</strong> for robotics, industrial automation, and medical applications. My research also explores unsupervised, semi-supervised, and zero-shot learning to build robust AI systems that learn with minimal labeled data. I am seeking a PhD to advance intelligent perception and decision-making for real-world autonomous systems.
+        I build AI systems for industrial settings where labelled data is limited and errors are expensive. At ABB, I designed a <strong>human-in-the-loop</strong> framework that cut P&amp;ID annotation effort by up to 85.9%, now being productised into ABB's global digitisation workflow. I work with <strong>vision-language models (VLMs)</strong> and open-vocabulary detection to replace per-customer training data, and on <strong>fine-tuning them to a company's specific requirements</strong> — taking problems from customer framing through to containerised deployment, and bringing the latest in perception research to real-world autonomous and industrial systems.
       </p>
       <div class="topics-wrap">
-        <span class="topic-pill">Zero-Shot Visual Understanding</span>
         <span class="topic-pill">Vision-Language Models</span>
-        <span class="topic-pill">Label-Efficient Learning</span>
-        <span class="topic-pill">Novel Class Discovery</span>
+        <span class="topic-pill">Fine-Tuning (LoRA)</span>
+        <span class="topic-pill">Low-Data &amp; Zero-Shot Learning</span>
+        <span class="topic-pill">Open-Vocabulary Detection</span>
+        <span class="topic-pill">Document Intelligence</span>
+        <span class="topic-pill">Human-in-the-Loop</span>
         <span class="topic-pill">Industrial Computer Vision</span>
-        <span class="topic-pill">Vision-Language-Action Models</span>
-        <span class="topic-pill">Robotic Perception</span>
+        <span class="topic-pill">Vision-Language-Action</span>
       </div>
     </section>
 
     <section id="experience" class="reveal">
       <div class="section-header">
         <span class="section-number">03</span>
-        <span class="section-title">Research &amp; Industry Experience</span>
+        <span class="section-title">Experience</span>
         <span class="section-rule"></span>
       </div>
       <div class="exp-timeline">
         <div class="exp-entry">
           <div class="exp-top">
-            <span class="exp-role">Master's Thesis Researcher</span>
+            <span class="exp-role">AI &amp; Computer Vision Engineer — Intern → Master's Thesis → Working Student</span>
             <span class="exp-dates">2025 – 2026</span>
           </div>
           <div class="exp-org">ABB AG, Mannheim, Germany</div>
-          <p class="exp-desc">Developed a clustering-based human-in-the-loop verification pipeline for industrial document digitisation. Investigated label-efficient approaches to symbol detection in P&amp;ID drawings. Designed and evaluated vision-language model pipelines for industrial inspection use cases.</p>
+          <ul class="exp-list">
+            <li>Architected a clustering-based human-in-the-loop framework that shifted P&amp;ID symbol digitisation from instance-level to batch-level decisions, cutting annotation effort by up to 85.9% across multi-diagram batches — now being productised into ABB's global industrial digitisation workflow.</li>
+            <li>Extended it into an LLM-assisted annotation tool for a further &gt;50% reduction in annotation cost on top of the human-in-the-loop baseline.</li>
+            <li>Built a no-code extensibility layer so domain engineers, not ML developers, can add new symbols and diagram standards on the fly — removing the key bottleneck to scaling across customer projects.</li>
+            <li>Evaluated a VLM as a zero-shot classifier over OWL-ViT detections: 69.9% accuracy on a 32-class vocabulary while flagging 37.9% of false-positive detections, removing the need for per-customer labelled data.</li>
+            <li>Prototyped an agentic recovery loop that masks detected regions and queries a VLM on the residual diagram to hypothesise missed symbols, feeding them back into the detector for a human-verified second pass.</li>
+          </ul>
+          <p class="exp-note">Thesis grade: 1.0</p>
         </div>
         <div class="exp-entry">
           <div class="exp-top">
-            <span class="exp-role">Computer Vision Intern (PoC)</span>
+            <span class="exp-role">Computer Vision Intern</span>
             <span class="exp-dates">2023</span>
           </div>
-          <div class="exp-org">JSW Steel Ltd., India</div>
-          <p class="exp-desc">Built proof-of-concept systems for flame volume measurement and pellet counting using classical and deep learning-based computer vision. Scoped as PoC — demonstrated technical feasibility for production evaluation.</p>
+          <div class="exp-org">JSW Steel Ltd., Mumbai, India</div>
+          <ul class="exp-list">
+            <li>Prototyped a non-contact gas-consumption estimation system measuring flare flame volume from video and still imagery with classical image processing, replacing unreliable flowmeter readings in high-temperature environments.</li>
+            <li>Built a real-time pellet-counting CV prototype for conveyor belts and containerised both solutions with Docker for internal stakeholder demonstration.</li>
+          </ul>
         </div>
       </div>
     </section>
@@ -610,29 +728,51 @@
       <div class="projects-grid">
         <div class="proj-card">
           <span class="proj-arrow">↗</span>
-          <div class="proj-name"><a href="https://github.com/aakashvanmali45/autonomous_robot_object_identification" target="_blank">Autonomous Robot with IR Object ID</a></div>
-          <p class="proj-desc">Chain-wheeled mobile robot using IR camera for real-time object identification. ROS 2 + Gazebo perception and control pipelines.</p>
-          <div class="proj-stack">Python · ROS 2 · Gazebo · Computer Vision</div>
+          <span class="proj-flag">VLMs · Industrial CV</span>
+          <div class="proj-name"><a href="https://github.com/aakashvanmali45/mvtec-vlm-robustness" target="_blank" rel="noopener">VLM Robustness on Industrial Defects</a></div>
+          <p class="proj-desc">A reproducible study of how vision-language models (CLIP, SigLIP) hold up for industrial defect classification on MVTec-AD under realistic factory corruptions — lighting, blur, sensor noise, compression, occlusion. Zero-shot baseline across 15 categories and 3 prompt strategies, with few-shot LoRA fine-tuning underway. Finding: zero-shot VLMs are weak on industrial defects (best mean balanced accuracy 0.638, AUROC 0.816), and SigLIP beats CLIP by 5–8 points.</p>
+          <div class="proj-stack">Python · PyTorch · CLIP / SigLIP · LoRA</div>
         </div>
         <div class="proj-card">
           <span class="proj-arrow">↗</span>
-          <div class="proj-name"><a href="https://github.com/aakashvanmali45/robot_path_planning_Astar_RRT" target="_blank">A* vs. RRT Path Planning</a></div>
-          <p class="proj-desc">Quantitative comparison of search-based and sampling-based path planning for robotic navigation in 2D environments.</p>
-          <div class="proj-stack">MATLAB · Path Planning · Robotics</div>
+          <span class="proj-flag">LLM Agents · Robotics</span>
+          <div class="proj-name"><a href="https://github.com/aakashvanmali45/ros2_assistant" target="_blank" rel="noopener">ROS 2 Assistant using LLMs</a></div>
+          <p class="proj-desc">An agentic natural-language-to-code assistant for ROS 2 (Jazzy) built on the GPT-4 API. Turns free-form commands into ROS 2 nodes, publishers, subscribers, services, clients and timers, and persists each generated node's topology as JSON for context-aware, incremental edits across sessions — a lightweight tool-use / memory pattern.</p>
+          <div class="proj-stack">Python · ROS 2 Jazzy · OpenAI GPT-4 · LLM Agents</div>
         </div>
         <div class="proj-card">
           <span class="proj-arrow">↗</span>
-          <div class="proj-name"><a href="https://github.com/aakashvanmali45/AI-Based-PID-Controller" target="_blank">AI-Optimised PID Controller</a></div>
-          <p class="proj-desc">PID controller with AI-based optimisation for precise temperature control in an industrial furnace simulation.</p>
-          <div class="proj-stack">MATLAB · Simulink · Control Systems</div>
+          <span class="proj-flag">Perception · Simulation</span>
+          <div class="proj-name"><a href="https://github.com/aakashvanmali45/autonomous_robot_object_identification" target="_blank" rel="noopener">Autonomous Robot with IR Object ID</a></div>
+          <p class="proj-desc">Chain-wheeled mobile robot with an IR camera for object identification. CAD in Fusion 360 → URDF → Gazebo, with IR-camera, LIDAR and skid-steer plugins; autonomous driving from LIDAR data and SIFT-based object identification, validated in a custom Gazebo world.</p>
+          <div class="proj-stack">ROS · Gazebo · Computer Vision · SIFT</div>
         </div>
         <div class="proj-card">
           <span class="proj-arrow">↗</span>
-          <div class="proj-name"><a href="https://github.com/aakashvanmali45/llms-from-scratch" target="_blank">LLMs from Scratch</a></div>
-          <p class="proj-desc">Ground-up implementation of LLM architectures — tokenisation, attention mechanisms, and training loops.</p>
-          <div class="proj-stack">Python · Transformers · Deep Learning</div>
+          <span class="proj-flag">Control · Optimisation</span>
+          <div class="proj-name"><a href="https://github.com/aakashvanmali45/AI-Based-PID-Controller" target="_blank" rel="noopener">AI-Optimised PID Controller</a></div>
+          <p class="proj-desc">A PID controller for furnace temperature control, tuned with AI-based optimisation in MATLAB / Simulink. Optimisation cut settling time from 29.83 s to 0.40 s and overshoot from 111.74 °C to zero, with no steady-state error.</p>
+          <div class="proj-stack">MATLAB · Simulink · Optimization · Control Systems</div>
         </div>
       </div>
+
+      <details class="other-projects">
+        <summary>More projects</summary>
+        <div class="projects-grid">
+          <div class="proj-card">
+            <span class="proj-arrow">↗</span>
+            <div class="proj-name"><a href="https://github.com/aakashvanmali45/robot_path_planning_Astar_RRT" target="_blank" rel="noopener">A* vs. RRT Path Planning</a></div>
+            <p class="proj-desc">Quantitative comparison of search-based and sampling-based path planning for robotic navigation in 2D environments.</p>
+            <div class="proj-stack">MATLAB · Path Planning · Robotics</div>
+          </div>
+          <div class="proj-card">
+            <span class="proj-arrow">↗</span>
+            <div class="proj-name"><a href="https://github.com/aakashvanmali45/llms-from-scratch" target="_blank" rel="noopener">LLMs from Scratch</a></div>
+            <p class="proj-desc">Ground-up implementation of LLM architectures — tokenisation, attention mechanisms, and training loops.</p>
+            <div class="proj-stack">Python · Transformers · Deep Learning</div>
+          </div>
+        </div>
+      </details>
     </section>
 
     <section class="reveal">
@@ -647,8 +787,18 @@
         </div>
         <div>
           <div class="edu-degree">M.Eng. Mechatronics &amp; Cyber-Physical Systems</div>
-          <div class="edu-school">Technische Hochschule Deggendorf, Germany</div>
+          <div class="edu-school">Technische Hochschule Deggendorf, Germany · 2024 – 2026</div>
           <div class="edu-detail">Specialisation: Robotics, Computer Vision, AI, Autonomous Systems</div>
+        </div>
+      </div>
+      <div class="edu-block">
+        <div class="edu-marker">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3L1 9l11 6 9-4.91V17M5 13.18v4L12 21l7-3.82v-4"/></svg>
+        </div>
+        <div>
+          <div class="edu-degree">B.Eng. Mechanical Engineering</div>
+          <div class="edu-school">University of Mumbai, India · 2019 – 2023</div>
+          <div class="edu-detail">Bachelor thesis: Deep Learning and Computer Vision for Self-Driving Cars</div>
         </div>
       </div>
     </section>
@@ -659,6 +809,7 @@
         <span class="section-title">Writing</span>
         <span class="section-rule"></span>
       </div>
+      <p class="section-intro">Interactive study notes — I work through recent papers by rebuilding their core ideas as live, in-browser labs. A habit that keeps me fluent across model evaluation, representation learning, and modern LLM and decoding methods.</p>
       <div class="projects-grid" style="grid-template-columns: 1fr;">
 
         <div class="proj-card">
@@ -695,15 +846,14 @@
           <p class="proj-desc">Why every working app quietly rots without tests, and how I built a three-layer suite — pure functions, HTTP endpoints, a real browser — for a small todo app I use every day. Includes an interactive test pyramid and an annotated AAA walkthrough.</p>
           <div class="proj-stack">Software Testing · Pytest · Playwright · Interactive</div>
         </div>
-        
+
         <div class="proj-card">
           <span class="proj-arrow">↗</span>
-          <div class="proj-name"><a href="blog/index.html">Notes on model evaluation — AUROC, F1, precision &amp; recall</a></div>
+          <div class="proj-name"><a href="blog/auroc-vs-f1-vs-roc.html">Notes on model evaluation — AUROC, F1, precision &amp; recall</a></div>
           <p class="proj-desc">A field guide to why accuracy lies under class imbalance, and why AUROC — born from WWII radar signal detection — is still the cleanest way to judge whether a classifier can separate signal from noise. Includes an interactive threshold simulator.</p>
           <div class="proj-stack">Model Evaluation · AUROC · Interactive</div>
         </div>
 
-        
       </div>
     </section>
 
@@ -718,13 +868,12 @@
         <a href="https://linkedin.com/in/aakashvanmali" target="_blank">LinkedIn</a>
       </div>
     </div>
-    <div class="footer-bottom">© 2026 Aakash Vanmali · Updated July 2026</div>
+    <div class="footer-bottom">© 2026 Aakash Vanmali · Updated October 2026</div>
   </footer>
 
   <script>
   // ============================================================
   // CLUSTERING ANIMATION
-  // "You can only connect the dots looking backwards" — Steve Jobs
   //
   // Phase 1: Random scatter (chaos, no structure)
   // Phase 2: Local edges form (nearest-neighbor connections appear)
@@ -993,7 +1142,7 @@
     window.addEventListener('resize', () => { resize(); });
   })();
 
-  // ---- Hero epigraph: fade in after the dots connect ----
+  // ---- Hero mission line: fade in after the dots connect ----
   (function() {
     const q = document.getElementById('heroQuote');
     if (!q) return;
